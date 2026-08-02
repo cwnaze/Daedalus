@@ -1,0 +1,51 @@
+name: pr-fix
+on:
+  issues:
+    types: [opened, edited]
+
+concurrency:
+  group: pr-fix-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  fix:
+    if: >
+      contains(github.event.issue.labels.*.name, 'agent-fix') &&
+      !contains(github.event.issue.labels.*.name, 'needs-human')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PIPELINE_PAT }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Materialize .env from repo secrets
+        env:
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+        run: node .github/scripts/write-env.mjs
+
+      - name: Start local services (only if this project has any)
+        run: |
+          # Most projects are hosted-SaaS only (Turso, Resend, R2) and need
+          # nothing here. This is a no-op unless a compose file exists.
+          if [ -f docker-compose.yml ] || [ -f compose.yml ]; then
+            docker compose up -d --wait
+          else
+            echo "No compose file — skipping."
+          fi
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.PIPELINE_PAT }}
+          prompt: /pr-fix
+          claude_args: --max-turns 120
