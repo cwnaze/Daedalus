@@ -65,25 +65,20 @@ Watch `needs-human` for notifications.
 
 ## Files
 
-The layout below is the full pipeline. Items marked `(todo)` are described by the
-skills and workflows but are not in this repo yet — `install.sh` will refuse to
-install a Phase 1 skill whose directory is missing, so add them before running it.
-
 ```
 install.sh
 phase1/
-  project-intake/            (todo)   stack-and-mcp-selection/   (todo)
-  project-docs/                       story-breakdown/           (todo)
-  repo-bootstrap/
+  project-intake/            stack-and-mcp-selection/   (+ references/mcp-map.md)
+  project-docs/              story-breakdown/           (+ references/coverage.md,
+  repo-bootstrap/                                          references/stories-schema.md)
 repo-template/
-  .claude/skills/{implement-story,pr-review,pr-fix,production-prep}/   (todo)
-  .github/workflows/{story-start,pr-review,pr-fix,production-prep}.yml
-  .github/workflows/story-complete.yml       (todo)
-  .github/scripts/complete-story.mjs         (todo)
+  .claude/skills/{implement-story,pr-review,pr-fix,production-prep}/
+  .github/workflows/{story-start,pr-review,pr-fix,story-complete,production-prep}.yml
+  .github/scripts/complete-story.mjs
   .github/scripts/write-env.mjs
-  e2e/{demo.ts,example.spec.ts}   playwright.config.ts                (todo)
+  e2e/{demo.ts,example.spec.ts}   playwright.config.ts
   scripts/sync-secrets.sh         .env.example
-  CLAUDE.md  README.md  stories.example.json  docs/{...}              (todo)
+  CLAUDE.md  README.md  stories.example.json  docs/{pipeline-log.md,demos/README.md}
 ```
 
 ## Design notes

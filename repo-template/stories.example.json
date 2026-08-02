@@ -1,0 +1,62 @@
+{
+  "project": "example-project",
+  "spineRepo": "owner/example-project",
+  "repos": {
+    "app": { "ssh": "git@github.com:owner/example-project.git", "root": "." }
+  },
+  "definitionOfDone": [
+    "typecheck passes",
+    "lint passes",
+    "build succeeds",
+    "story demo spec passes and regenerates its demo doc",
+    "all previously passing demo specs still pass"
+  ],
+  "stories": [
+    {
+      "id": "US-A00",
+      "repo": "app",
+      "title": "Scaffold the application",
+      "userStory": "As a developer, I need a working project skeleton so every later story has somewhere to build.",
+      "acceptanceCriteria": [
+        "Project created with TypeScript and the chosen framework",
+        "Dev server renders a placeholder page"
+      ],
+      "dependsOn": [],
+      "status": "pending",
+      "demoKind": "browser",
+      "verification": {
+        "commands": ["npm run check", "npm run lint", "npm run build"],
+        "specs": ["e2e/us-a00.spec.ts"]
+      },
+      "demo": "docs/demos/US-A00.md",
+      "branch": null,
+      "prNumber": null,
+      "issueNumber": null,
+      "reviewRounds": 0,
+      "notes": ""
+    },
+    {
+      "id": "US-A01",
+      "repo": "app",
+      "title": "Provision the database and baseline schema",
+      "userStory": "As a developer, I need persistence provisioned so later features have somewhere to store data.",
+      "acceptanceCriteria": [
+        "Database provisioned and reachable with credentials in .env and in CI secrets",
+        "ORM configured and an empty baseline schema applies cleanly"
+      ],
+      "dependsOn": ["US-A00"],
+      "status": "pending",
+      "demoKind": "command",
+      "verification": {
+        "commands": ["npm run db:push", "npm run check"],
+        "specs": []
+      },
+      "demo": "docs/demos/US-A01.md",
+      "branch": null,
+      "prNumber": null,
+      "issueNumber": null,
+      "reviewRounds": 0,
+      "notes": ""
+    }
+  ]
+}

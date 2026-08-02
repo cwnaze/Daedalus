@@ -30,8 +30,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Install dependencies (skipped before the app is scaffolded)
+        run: |
+          # Story 1 creates package.json. Until then there is nothing to install,
+          # and an unconditional `npm ci` fails the very first run of the pipeline.
+          if [ -f package-lock.json ]; then
+            npm ci
+            npx playwright install --with-deps chromium
+          elif [ -f package.json ]; then
+            npm install
+            npx playwright install --with-deps chromium
+          else
+            echo "No package.json yet — this is the scaffolding story."
+          fi
       - name: Materialize .env from repo secrets
         env:
           ALL_SECRETS: ${{ toJSON(secrets) }}
