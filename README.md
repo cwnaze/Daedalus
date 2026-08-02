@@ -7,7 +7,7 @@ with a generated demo per story that doubles as the regression suite.
 ## Install
 
 ```bash
-git clone <this-repo> && cd project-pipeline
+git clone git@github.com:cwnaze/agentic-claude-workflow.git && cd agentic-claude-workflow
 ./install.sh --check     # verify prerequisites first
 ./install.sh             # or --link, if you plan to edit the skills
 ```
@@ -65,20 +65,25 @@ Watch `needs-human` for notifications.
 
 ## Files
 
+The layout below is the full pipeline. Items marked `(todo)` are described by the
+skills and workflows but are not in this repo yet — `install.sh` will refuse to
+install a Phase 1 skill whose directory is missing, so add them before running it.
+
 ```
 install.sh
 phase1/
-  project-intake/            stack-and-mcp-selection/   (+ references/mcp-map.md)
-  project-docs/              story-breakdown/           (+ references/coverage.md,
-  repo-bootstrap/                                          references/stories-schema.md)
+  project-intake/            (todo)   stack-and-mcp-selection/   (todo)
+  project-docs/                       story-breakdown/           (todo)
+  repo-bootstrap/
 repo-template/
-  .claude/skills/{implement-story,pr-review,pr-fix,production-prep}/
-  .github/workflows/{story-start,pr-review,pr-fix,story-complete,production-prep}.yml
-  .github/scripts/complete-story.mjs
+  .claude/skills/{implement-story,pr-review,pr-fix,production-prep}/   (todo)
+  .github/workflows/{story-start,pr-review,pr-fix,production-prep}.yml
+  .github/workflows/story-complete.yml       (todo)
+  .github/scripts/complete-story.mjs         (todo)
   .github/scripts/write-env.mjs
-  e2e/{demo.ts,example.spec.ts}   playwright.config.ts
+  e2e/{demo.ts,example.spec.ts}   playwright.config.ts                (todo)
   scripts/sync-secrets.sh         .env.example
-  CLAUDE.md  README.md  stories.example.json  docs/{pipeline-log.md,demos/README.md}
+  CLAUDE.md  README.md  stories.example.json  docs/{...}              (todo)
 ```
 
 ## Design notes
