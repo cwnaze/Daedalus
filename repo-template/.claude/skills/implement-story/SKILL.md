@@ -72,4 +72,21 @@ Demo: docs/demos/<ID>.md
 ## Deviations
 ```
 
+Then enable auto-merge:
+
+```bash
+gh pr merge <number> --auto --squash
+```
+
+This is what closes the loop. Branch protection *permits* a merge, it never performs
+one — without auto-merge armed here, `pr-review` approves the PR and the pipeline stops
+forever with nothing to merge it and no signal that it is waiting. With it armed, the
+approval satisfies the last required check and GitHub merges, which fires
+`story-complete`, which dispatches the next story.
+
+Auto-merge requires it to be enabled on the repo and at least one required status check
+or review on `main`; `repo-bootstrap` verifies both. If the command fails, do not fall
+back to merging directly — report it, because an agent that merges on its own judgement
+has no check on it.
+
 Set `prNumber`, `status: in_review`, commit to main with a log line.

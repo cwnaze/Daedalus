@@ -6,8 +6,11 @@ on:
     types: [created]
 
 concurrency:
-  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
+  # Same group as story-start/pr-fix/story-complete: all four commit stories.json
+  # to main, and two of them running at once means one push loses the race.
+  # Serializing is free here — the invariant is one non-terminal story at a time.
+  group: story-pipeline
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -60,7 +63,7 @@ jobs:
           path: docs/demos/assets
           key: demos-${{ github.base_ref }}-${{ github.sha }}
           restore-keys: demos-${{ github.base_ref }}-
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.PIPELINE_PAT }}

@@ -15,6 +15,14 @@ echo "Syncing to $repo"
 count=0
 while IFS= read -r key; do
   value="$(grep -E "^${key}=" .env | head -n1 | cut -d= -f2- || true)"
+
+  # Strip one layer of matching quotes. Without this, KEY="v" uploads the quote
+  # characters as part of the secret and the app reads a value nothing matches.
+  case "$value" in
+    \"*\") value="${value#\"}"; value="${value%\"}" ;;
+    \'*\') value="${value#\'}"; value="${value%\'}" ;;
+  esac
+
   if [ -z "$value" ]; then
     echo "  skip  $key (empty in .env)"
     continue
@@ -22,7 +30,7 @@ while IFS= read -r key; do
   gh secret set "$key" --repo "$repo" --body "$value"
   echo "  set   $key"
   count=$((count + 1))
-done < <(grep -oE '^[A-Z0-9_]+(?==)' .env.example 2>/dev/null || grep -E '^[A-Z0-9_]+=' .env.example | cut -d= -f1)
+done < <(grep -E '^[A-Z0-9_]+=' .env.example | cut -d= -f1)
 
 echo "$count secret(s) synced."
 echo "Note: ANTHROPIC_API_KEY and PIPELINE_PAT are pipeline secrets, not app secrets."

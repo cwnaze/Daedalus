@@ -79,8 +79,12 @@ Label `agent-fix`. Increment `reviewRounds`.
 
 ### 7. Terminate or approve
 
-- **Clean:** approve the PR. Do not merge — branch protection does that. An agent that
-  merges on its own judgement has no check on it.
+- **Clean:** approve the PR. Do not merge it yourself — `implement-story` armed
+  `gh pr merge --auto` when it opened the PR, so your approval satisfies the last
+  required check and GitHub performs the merge. An agent that merges directly, outside
+  branch protection, has no check on it. If the PR does not merge within a few minutes,
+  auto-merge was never armed or the repo has it disabled — say so rather than merging
+  by hand.
 - **Findings, `reviewRounds < 3`:** the issue update fires `pr-fix`.
 - **`reviewRounds >= 3`:** remove `agent-fix`, add `needs-human`, comment with what is
   still failing and what each round tried, set `status: needs_human`. **Do not dispatch

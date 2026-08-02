@@ -51,7 +51,12 @@ export const test = base.extend<{ demo: Demo }>({
     if (!storyId) throw new Error('Demo test titles must start with the story ID, e.g. "US-H01: compose and send"');
     const d = new Demo(storyId, testInfo.title.replace(/^US-[A-Z]\d+:\s*/, ''), page);
     await use(d);
-    await d.write(testInfo.status === 'passed' ? 'PASS' : 'FAIL');
+    // Only a passing run may overwrite the demo doc. A failed run's partial
+    // screenshots would otherwise become the baseline that pr-review diffs the
+    // *next* run against, turning one failure into a phantom visual regression
+    // on a story nobody touched.
+    if (testInfo.status === 'passed') await d.write('PASS');
+    else console.error(`${storyId} failed — keeping the previous demo doc as the baseline.`);
   },
 });
 

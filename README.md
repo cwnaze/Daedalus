@@ -39,12 +39,14 @@ runner from those secrets. `.env` is never committed.
 Then it runs itself:
 
 ```
-story-start → PR → pr-review → issue → pr-fix ─┐
-                     ▲                          │
-                     └──────── synchronize ─────┘
-                  approve → merge → story-complete → next story
-                                              ↓ (no stories left)
-                                        production-prep
+story-start → PR (auto-merge armed) → pr-review → issue → pr-fix ─┐
+                                        ▲                          │
+                                        └──────── synchronize ─────┘
+                     approve → auto-merge → story-complete → next story
+                                                       ↓ (no stories left)
+                                                 production-prep
+
+pipeline-watchdog (hourly) ──→ resumes or escalates a stalled run
 ```
 
 ## Required repo secrets
@@ -53,15 +55,28 @@ story-start → PR → pr-review → issue → pr-fix ─┐
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude Code in Actions |
 | `PIPELINE_PAT` | PAT or App token, `repo` + `workflow`. **Without it the chain dies silently after story 1** — a workflow's own `GITHUB_TOKEN` cannot trigger another workflow. |
+| `PIPELINE_WEBHOOK` | Optional. Slack/Discord/ntfy URL; `notify` posts there when anything gets labeled `needs-human`. Unset, the job no-ops. |
 
 Plus every key in the project's `.env.example` — `scripts/sync-secrets.sh` handles those.
+
+Auto-merge must also be enabled on the repo (`allow_auto_merge`), with at least one
+required review or status check on `main`. `implement-story` arms `gh pr merge --auto`
+on every PR and that is the only thing that merges anything; `repo-bootstrap` checks
+both before dispatching story 1.
 
 ## Controlling it from a phone
 
 No UI needed. The pinned `steering` issue is the input channel — comment on it and
 `implement-story` and `pr-fix` read it as binding constraints on their next run.
-Comment `pause` to stop dispatch. Comment on a PR directly to feed the fix loop.
-Watch `needs-human` for notifications.
+Comment on a PR directly to feed the fix loop.
+
+A comment that is exactly `pause` halts all dispatch; `resume` restarts it. The most
+recent directive wins, and prose *about* pausing does not count — the line has to be
+just the word, so discussion on the issue can't stop the pipeline by accident. This is
+also the kill switch.
+
+Set `PIPELINE_WEBHOOK` to get pushed alerts when something needs you; otherwise watch
+the `needs-human` label.
 
 ## Files
 
@@ -74,8 +89,8 @@ phase1/
 repo-template/
   .claude/skills/{implement-story,pr-review,pr-fix,production-prep}/
   .github/workflows/{story-start,pr-review,pr-fix,story-complete,production-prep}.yml
-  .github/scripts/complete-story.mjs
-  .github/scripts/write-env.mjs
+  .github/workflows/{pipeline-watchdog,notify}.yml
+  .github/scripts/{complete-story,dispatch-next,watchdog,write-env}.mjs
   e2e/{demo.ts,example.spec.ts}   playwright.config.ts
   scripts/sync-secrets.sh         .env.example
   CLAUDE.md  README.md  stories.example.json  docs/{pipeline-log.md,demos/README.md}
@@ -97,6 +112,22 @@ regression signal.
 several times more and yields overlapping findings the fix agent must then reconcile.
 `production-prep` *is* a fan-out, because it is whole-repo and its passes are genuinely
 independent.
+
+**Why there is a watchdog, given there is no orchestrator.** Event-driven means an
+event that never fires is indistinguishable from nothing to do. A runner eviction, an
+API 5xx, or a job timeout leaves a story non-terminal with no further event coming, and
+the pipeline stops mid-story, silently, forever. `pipeline-watchdog` is the one
+time-triggered thing in the repo: hourly, it looks for a story that is non-terminal
+while no workflow is running and `stories.json` has not moved in 90 minutes, then
+re-dispatches (`implement-story` already knows how to resume one) or escalates. It is
+not an orchestrator — it holds no state and makes no decisions the normal path doesn't.
+
+**Why dispatch goes through one script.** `dispatch-next.mjs` is the only thing that
+dispatches, so the pause switch, the stuck-story check, and the daily run ceiling cannot
+be bypassed by a caller that forgot them. The ceiling matters because `--max-turns`
+bounds a single run and nothing bounded the total: a review/fix cycle that never
+converges, or a watchdog retrying something permanently broken, otherwise bills all the
+way down with no alert.
 
 **Why the loop terminates at 3 rounds.** Review → fix → review will cycle indefinitely
 on anything the reviewer is subtly wrong about. Round 3 hard-stops to `needs-human`.

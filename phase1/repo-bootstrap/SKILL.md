@@ -71,10 +71,21 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
 - [ ] Every key in `.env.example` exists in `gh secret list`
 - [ ] `.env` is gitignored and absent from `git ls-files`
 - [ ] Branch protection on `main`: require PR, require status checks, no force push
+- [ ] **Auto-merge is enabled on the repo** —
+      `gh api -X PATCH repos/<owner>/<repo> -F allow_auto_merge=true`. `implement-story`
+      arms `gh pr merge --auto` on every PR, and that is the only thing that merges
+      anything. Without it the pipeline approves story 1 and then waits forever.
+- [ ] At least one required review or status check on `main` — auto-merge with nothing
+      required merges the PR the instant it opens, before review runs at all
 - [ ] Labels exist: `agent-fix`, `needs-human`, `steering`
-- [ ] The steering issue exists, labeled `steering`, pinned
+- [ ] The steering issue exists, labeled `steering`, pinned. Its body should say that
+      commenting `pause` halts dispatch and `resume` restarts it
 - [ ] `gh workflow run story-start.yml` dispatches without error
-- [ ] `gh workflow list` shows all five workflows registered
+- [ ] `gh workflow list` shows all six workflows registered, including
+      `pipeline-watchdog`
+- [ ] `gh workflow run pipeline-watchdog.yml -f dry_run=true` reports the pipeline as
+      idle rather than erroring — this is the recovery path for a crashed run, and it
+      is worth knowing it works before you need it
 
 ### 5. Dry run
 

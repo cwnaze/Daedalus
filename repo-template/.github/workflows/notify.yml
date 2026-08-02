@@ -1,0 +1,40 @@
+name: notify
+# "Watch the needs-human label" only works if GitHub notifications happen to be
+# configured the way you assume. For a pipeline whose whole premise is that you
+# can leave it running and check in from a phone, the moment it needs you is the
+# one moment it must reach out rather than wait to be noticed.
+#
+# Opt-in: set the PIPELINE_WEBHOOK secret to a Slack/Discord/ntfy URL. Unset, the
+# job no-ops, so this workflow costs nothing if you would rather use GitHub's own
+# notifications.
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: github.event.label.name == 'needs-human'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post to the webhook
+        env:
+          WEBHOOK: ${{ secrets.PIPELINE_WEBHOOK }}
+          TITLE: ${{ github.event.issue.title || github.event.pull_request.title }}
+          URL: ${{ github.event.issue.html_url || github.event.pull_request.html_url }}
+        run: |
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "PIPELINE_WEBHOOK not set — skipping. (Set it to get pushed alerts.)"
+            exit 0
+          fi
+          # text/content/message together cover Slack, Discord and ntfy without
+          # needing to know which one this URL is.
+          body="${{ github.repository }} needs a human: ${TITLE} — ${URL}"
+          jq -n --arg b "$body" '{text:$b, content:$b, message:$b}' \
+            | curl -sS -X POST -H 'Content-Type: application/json' -d @- "$WEBHOOK" \
+            || echo "::warning::Webhook post failed — check PIPELINE_WEBHOOK."

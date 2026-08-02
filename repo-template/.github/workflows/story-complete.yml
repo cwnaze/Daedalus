@@ -28,14 +28,8 @@ jobs:
         run: node .github/scripts/complete-story.mjs
       - name: Dispatch next story
         env:
-          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
-        run: |
           # PIPELINE_PAT, not GITHUB_TOKEN: a workflow's own token cannot
           # trigger another workflow, and the chain would die here silently.
-          if [ "$(jq -r '[.stories[] | select(.status != "done")] | length' stories.json)" -gt 0 ]; then
-            gh api "repos/${{ github.repository }}/dispatches" \
-              -f event_type=story-start
-          else
-            gh api "repos/${{ github.repository }}/dispatches" \
-              -f event_type=production-prep
-          fi
+          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/dispatch-next.mjs

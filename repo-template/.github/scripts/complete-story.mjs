@@ -36,7 +36,20 @@ sh('git', ['config', 'user.name', 'pipeline-bot']);
 sh('git', ['config', 'user.email', 'pipeline-bot@users.noreply.github.com']);
 sh('git', ['add', 'stories.json', 'docs/pipeline-log.md']);
 sh('git', ['commit', '-m', `chore(pipeline): ${storyId} done`]);
-sh('git', ['push']);
+
+// Concurrency serializes the workflows, but a human pushing to main during the
+// run still loses us the race. An unretried push here strands the story as
+// in_review forever with nothing to re-dispatch it, so retry with a rebase.
+for (let attempt = 1; ; attempt++) {
+  try {
+    sh('git', ['push']);
+    break;
+  } catch (e) {
+    if (attempt === 5) throw new Error(`push failed after ${attempt} attempts: ${e.message}`);
+    console.error(`push rejected (attempt ${attempt}), rebasing and retrying`);
+    sh('git', ['pull', '--rebase', '--autostash']);
+  }
+}
 
 const remaining = db.stories.filter((s) => s.status !== 'done').length;
 console.log(`${storyId} done. ${remaining} remaining.`);
