@@ -6,4 +6,3 @@ build/
 .svelte-kit/
 playwright-report/
 test-results/
-mnt/
