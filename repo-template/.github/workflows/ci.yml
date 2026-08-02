@@ -1,0 +1,68 @@
+name: ci
+# The required status check. Two jobs it has to do:
+#
+#   1. Be an independent gate. pr-review is an agent judging its own sibling's
+#      work; this is a deterministic check that does not negotiate.
+#   2. Exist at all, so branch protection has something to require. With an empty
+#      required-checks list, the auto-merge that implement-story arms fires the
+#      instant the PR opens — before any review has run.
+#
+# Keep this fast and boring. Deep verification belongs to pr-review.
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate the pipeline state file
+        run: |
+          # Cheap, and it catches a dependsOn cycle or a malformed record here
+          # rather than as a mystery "no eligible story" three workflows later.
+          if [ -f stories.json ]; then
+            node .github/scripts/validate-stories.mjs
+          fi
+
+      - name: Install dependencies (skipped before the app is scaffolded)
+        run: |
+          # Story 1 creates package.json. Until then there is nothing to check,
+          # and this job still has to report success or it blocks its own PR.
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f package.json ]; then
+            npm install
+          else
+            echo "No package.json yet — this is the scaffolding story."
+          fi
+
+      - name: Typecheck, lint, build
+        run: |
+          if [ ! -f package.json ]; then
+            echo "Nothing to check yet."
+            exit 0
+          fi
+          # Run whichever of these the project actually defines. A project that
+          # has not added `lint` yet should not fail on its absence.
+          for script in check lint build; do
+            if node -e "process.exit(require('./package.json').scripts?.['$script'] ? 0 : 1)"; then
+              echo "::group::npm run $script"
+              npm run "$script"
+              echo "::endgroup::"
+            else
+              echo "No \"$script\" script — skipping."
+            fi
+          done

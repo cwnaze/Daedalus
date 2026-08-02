@@ -66,6 +66,37 @@ jobs:
       - uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # PIPELINE_PAT here so the findings issue it opens actually triggers
+          # pr-fix — an issue created by GITHUB_TOKEN triggers nothing.
           github_token: ${{ secrets.PIPELINE_PAT }}
           prompt: /pr-review
           claude_args: --max-turns 100
+
+      - name: Apply the review verdict
+        if: always()
+        env:
+          # Must NOT be PIPELINE_PAT: that identity opened the PR, and GitHub
+          # refuses to let an account approve its own pull request. Set
+          # REVIEWER_TOKEN to a second PAT or App token if your branch protection
+          # requires an approval from a real user; otherwise the github-actions
+          # bot approves, which satisfies a plain "require approvals" rule.
+          GH_TOKEN: ${{ secrets.REVIEWER_TOKEN || secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          if [ ! -f .pipeline/review-verdict.json ]; then
+            echo "::error::pr-review wrote no verdict — treating as inconclusive."
+            gh pr comment "$PR" --body "pr-review finished without recording a verdict. This needs a human." || true
+            gh pr edit "$PR" --add-label needs-human || true
+            exit 1
+          fi
+          verdict=$(jq -r .verdict .pipeline/review-verdict.json)
+          summary=$(jq -r '.summary // ""' .pipeline/review-verdict.json)
+          echo "Verdict: $verdict — $summary"
+          case "$verdict" in
+            approve)            gh pr review "$PR" --approve --body "$summary" ;;
+            changes-requested)  gh pr review "$PR" --request-changes --body "$summary" ;;
+            needs-human)        gh pr edit "$PR" --add-label needs-human
+                                gh pr comment "$PR" --body "$summary" ;;
+            *) echo "::error::Unrecognized verdict: $verdict"; exit 1 ;;
+          esac

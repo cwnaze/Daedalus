@@ -55,8 +55,16 @@ function isPaused() {
     sh('gh', ['issue', 'view', String(issues[0].number), '--repo', repo, '--json', 'body,comments']),
   );
 
+  // Only people with write access steer the pipeline. On a public repo, an
+  // unfiltered read means any stranger can halt the build by commenting "pause"
+  // — and the same channel is read by agents holding a PAT with repo scope.
+  const TRUSTED = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+  const trusted = comments.filter((c) => TRUSTED.includes(c.authorAssociation));
+  const ignored = comments.length - trusted.length;
+  if (ignored) console.log(`Ignoring ${ignored} steering comment(s) from non-collaborators.`);
+
   let paused = false;
-  for (const text of [body, ...comments.map((c) => c.body)]) {
+  for (const text of [body, ...trusted.map((c) => c.body)]) {
     // Only a line that is exactly the directive counts. Prose *about* pausing
     // ("we should pause if X") must not stop the pipeline.
     for (const line of (text ?? '').split('\n')) {

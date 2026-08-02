@@ -6,3 +6,4 @@ build/
 .svelte-kit/
 playwright-report/
 test-results/
+.pipeline/       # review verdict handoff, CI-only
