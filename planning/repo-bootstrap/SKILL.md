@@ -111,6 +111,13 @@ that has genuinely already been decided.
 4. Run `./scripts/sync-secrets.sh` to push them to repo secrets, and confirm with
    `gh secret list` that the count matches.
 
+`sync-secrets.sh` covers app secrets only. The pipeline's own secrets —
+`CLAUDE_CODE_OAUTH_TOKEN`, `PIPELINE_PAT`, and the optional `PIPELINE_WEBHOOK` and
+`REVIEWER_TOKEN` — are set by hand with `gh secret set` and must not be added to
+`.env.example`. Putting one there would sync it, but it would also commit its name to
+the repo as an app variable and make `write-env.mjs` write it into `.env` on every
+runner, which is not where any of them are read from.
+
 `.env` itself is never committed. CI rebuilds it on each runner from repo secrets via
 `.github/scripts/write-env.mjs`.
 

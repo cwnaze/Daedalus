@@ -147,6 +147,17 @@ pipeline-watchdog (hourly) ──→ resumes or escalates a stalled run
 
 ## Required repo secrets
 
+Two kinds, set two different ways. Everything is a GitHub repo secret; `.env` is only
+ever local or rebuilt on the runner, and is never committed.
+
+**Pipeline secrets** run the pipeline itself. Set each one by hand — they do **not**
+belong in `.env`, and `sync-secrets.sh` will not pick them up:
+
+```bash
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>   # `claude setup-token` output
+gh secret set PIPELINE_PAT --repo <owner>/<repo>
+```
+
 | Secret | Why |
 |---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code in Actions. Generate with `claude setup-token` against a Pro or Max subscription — no API key or API billing needed. Draws on your subscription quota, which is why `pipeline-watchdog` backs off when it is exhausted. |
@@ -154,7 +165,20 @@ pipeline-watchdog (hourly) ──→ resumes or escalates a stalled run
 | `PIPELINE_WEBHOOK` | Optional. Slack/Discord/ntfy URL; `notify` posts there when anything gets labeled `needs-human`. Unset, the job no-ops. |
 | `REVIEWER_TOKEN` | Optional but **must not be `PIPELINE_PAT`**. The identity that approves PRs. GitHub refuses to let the account that opened a PR approve it, so the reviewer has to be someone else; unset, the `github-actions` bot approves instead. |
 
-Plus every key in the project's `.env.example` — `scripts/sync-secrets.sh` handles those.
+**App secrets** are whatever the project itself needs — database URL, third-party keys.
+Those go through `.env`:
+
+```bash
+cp .env.example .env    # fill in real values
+./scripts/sync-secrets.sh
+```
+
+`.env.example` is the allowlist in both directions: `sync-secrets.sh` pushes up only the
+keys listed there, and `write-env.mjs` rebuilds `.env` from those same keys on each
+runner. So a variable the app needs but `.env.example` omits is invisible to CI —
+`write-env.mjs` warns rather than fails, and it surfaces later as a feature that looks
+broken to `pr-review`. Empty values are skipped with a `skip <KEY>` line, not an error;
+read the sync output rather than trusting its exit code.
 
 Auto-merge must also be enabled on the repo (`allow_auto_merge`), with `ci` required on
 `main`. `implement-story` arms `gh pr merge --auto`
