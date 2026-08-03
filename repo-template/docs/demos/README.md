@@ -2,7 +2,8 @@
 
 **These files are generated. Do not edit them by hand.**
 
-Each one is produced by its story's Playwright spec via the harness in `e2e/demo.ts`.
+Each one is produced by its story's spec: browser stories via the Playwright harness in
+`e2e/demo.ts`, command stories via `e2e/demo-command.mjs`.
 A demo doc exists only if its spec passed, which is what keeps it honest — a
 hand-written demo can describe behaviour the app no longer has; a generated one cannot.
 

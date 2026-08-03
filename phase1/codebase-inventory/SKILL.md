@@ -26,6 +26,16 @@ in ways nobody notices until 20 stories in.
 
 ## Procedure
 
+### 0. Scope check
+
+The detector reports what kind of project this is. If it turns out to be a mobile app, a
+native desktop app, a game, firmware, or an ML training pipeline, stop and say so — the
+pipeline cannot generate a per-story proof for those, and without that proof the
+refactor has no safety net. See "What this is for" in the repo README.
+
+A project with no web surface is fine; it uses command demos. A project whose behaviour
+cannot be demonstrated automatically at all is not.
+
 ### 1. Detect the toolchain
 
 ```bash

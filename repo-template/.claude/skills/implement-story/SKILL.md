@@ -55,7 +55,19 @@ Determinism rules, non-negotiable because flake here poisons every later review:
 - Seeded fixture data, never live or random
 - Wait on state, never on time
 
-For `demoKind: "command"`, capture the proving command's output into the demo doc instead.
+For `demoKind: "command"` — a CLI, a library, a migration, a scheduled job, anything
+with no browser surface — use the command harness instead:
+
+```bash
+node e2e/demo-command.mjs <ID> "<title>" \
+  --step "<caption>" "<command>" \
+  --step "<caption>" "<command>"
+```
+
+Same contract as the browser harness: the doc is generated, exists only if the commands
+actually succeeded, and a failed run leaves the previous doc in place rather than
+installing itself as the baseline. Choose commands that *prove* the story, not ones that
+merely exit 0 — `--version` proves installation, not behaviour.
 
 ## 5. Verify locally before opening the PR
 

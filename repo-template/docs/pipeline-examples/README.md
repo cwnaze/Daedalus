@@ -46,7 +46,7 @@ the harness lives in `e2e/package.json`, installed separately, and never appears
 ## Non-web projects
 
 A CLI, a library, or a data pipeline has no `serve` block. Those stories use
-`demoKind: "command"` and capture the proving command's output into the demo doc instead
-of screenshots. The regression mechanism is unchanged — `pr-review` re-runs every done
+`demoKind: "command"` and `e2e/demo-command.mjs`, which captures the proving commands'
+output into the demo doc instead of screenshots. The regression mechanism is unchanged — `pr-review` re-runs every done
 story's verification on every PR, whether that verification is a browser flow or a
 command whose output must still match.

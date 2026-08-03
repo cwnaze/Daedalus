@@ -2,6 +2,15 @@
 
 Every item gets an answer during pass 2: covering story, new story, or explicit N/A.
 
+**This checklist is written for web applications and HTTP services**, which is what the
+pipeline is built for. On a CLI, library, or data pipeline a good number of these are
+legitimately N/A — CORS and session lifecycle on a CLI, for instance. Mark them N/A with
+the reason and move on; that is a correct answer, not a skipped one.
+
+What does *not* become N/A on a non-web project: secrets handling, input validation,
+error handling, migrations, backups, and documentation. Those are where a "this is just a
+CLI" reflex does real damage.
+
 ## Foundation
 - [ ] Project scaffolded with the chosen framework, TypeScript, and lint/format
 - [ ] Database provisioned, connection verified from the app

@@ -61,8 +61,9 @@ docs/pipeline-log.md          # append-only audit log, seeded with the bootstrap
 docs/demos/                   # empty, with a README explaining these are generated
 .claude/skills/               # implement-story, pr-review, pr-fix, production-prep
 .github/workflows/            # the full set — see the split-repo rule below
-.github/scripts/              # complete-story, dispatch-next, watchdog, validate-stories, write-env
-e2e/                          # harness: playwright config + demo helper
+.github/scripts/              # complete-story, dispatch-next, watchdog, validate-stories,
+                              #   read-manifest, write-env
+e2e/                          # harness: demo.ts (browser) + demo-command.mjs (no UI)
 playwright.config.ts          # includes the webServer block that serves the app in CI
 scripts/sync-secrets.sh       # pushes .env values up to repo secrets
 README.md

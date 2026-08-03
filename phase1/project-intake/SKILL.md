@@ -15,6 +15,19 @@ Phase 1, step 1 of 5. Turns a rough project idea into an approved intake documen
 
 ## Procedure
 
+### 0. Scope check
+
+Before the interview, confirm the project is one this pipeline can build: a web
+application or HTTP service, or a CLI/library/job that can be proven by command output.
+
+If it is a mobile app, a native desktop app, a game, firmware, or an ML training
+pipeline, **stop and say so**. The pipeline's safety comes entirely from a per-story
+proof that regenerates and re-runs on every later PR; where that proof needs a human
+looking at a device, nothing downstream is safe. Better to say this in the first two
+minutes than after a full documentation set.
+
+See "What this is for" in the repo README for the full table.
+
 ### 1. Restate
 
 Read back what you understood from their opening message in two or three sentences. Ask what is wrong with it. This is cheap and catches misreads before they compound through four more skills.

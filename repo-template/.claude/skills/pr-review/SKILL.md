@@ -32,6 +32,8 @@ review a diff that does not build.
 Bring services up (`docker compose up -d`, wait on health checks). Then:
 
 - Run this story's specs. They must pass **and** regenerate `docs/demos/<ID>.md`.
+  For `demoKind: "command"` stories, re-run their `e2e/demo-command.mjs` invocation
+  instead — same requirement, the doc must regenerate.
 - Run every spec belonging to a `done` story. **This is the regression check** — the
   reason specs are mandatory rather than optional.
 

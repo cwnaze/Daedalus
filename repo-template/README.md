@@ -19,5 +19,9 @@ Specs generate the demo docs in `docs/demos/` — those are build artifacts, not
 hand-written. Read them to see what the app does, story by story.
 
 ## Build pipeline
-This repo builds itself one story at a time. `stories.json` is the plan and the state;
+This repo builds itself one story at a time. The pipeline is built for web applications
+and HTTP services; CLIs and libraries work too, with command-output demos in place of
+browser flows. It cannot build mobile, native desktop, games, firmware, or ML training
+projects, because it cannot generate an automatic per-story proof for them.
+ `stories.json` is the plan and the state;
 `docs/pipeline-log.md` is the history. See `CLAUDE.md` for the rules the agents follow.
