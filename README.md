@@ -140,7 +140,7 @@ story-start → PR (auto-merge armed) → pr-review → issue → pr-fix ─┐
                                         └──────── synchronize ─────┘
                      approve → auto-merge → story-complete → next story
                                                        ↓ (no stories left)
-                                                 production-prep
+                                          needs-human issue → you run production-prep
 
 pipeline-watchdog (hourly) ──→ resumes or escalates a stalled run
 ```

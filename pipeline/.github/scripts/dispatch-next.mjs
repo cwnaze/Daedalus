@@ -174,5 +174,46 @@ if (openPrep.length) {
   process.exit(0);
 }
 
-console.log('All stories done.');
-dispatch('production-prep');
+// Deliberately NOT dispatched. At --max-turns 200 over a whole-repo fan-out it is by
+// far the largest single spend in the pipeline, and it runs on a subscription quota
+// shared with interactive work. Everything up to here is safe to leave unattended;
+// this one step is worth choosing to start. Run it with:
+//
+//   gh workflow run production-prep --repo <owner>/<repo>
+//
+// The workflow still accepts repository_dispatch, so restoring the automatic
+// behaviour is a one-line change here if the quota ever stops being the constraint.
+console.log('All stories done. production-prep is manual — not dispatching.');
+
+const title = 'All stories done — run production-prep';
+// The watchdog calls this script hourly, so an unguarded `issue create` would file a
+// duplicate every tick. Reuse the open one instead.
+let existing = [];
+try {
+  existing = JSON.parse(
+    sh('gh', ['issue', 'list', '--repo', repo, '--state', 'open', '--label', 'needs-human', '--search', title, '--json', 'number,title']),
+  ).filter((i) => i.title === title);
+} catch (e) {
+  console.error(`Could not check for an existing handoff issue (${e.message}).`);
+}
+if (existing.length) {
+  console.log(`Handoff issue #${existing[0].number} is already open.`);
+  process.exit(0);
+}
+
+try {
+  sh('gh', ['issue', 'create', '--repo', repo, '--title', title, '--label', 'needs-human', '--body',
+    'Every story on the board is `done`, so the pipeline has reached its terminus.\n\n' +
+    '`production-prep` is the last step and is **not dispatched automatically** — it is the ' +
+    'largest single quota spend in the pipeline, so it is left for you to start deliberately:\n\n' +
+    '```bash\n' +
+    `gh workflow run production-prep --repo ${repo}\n` +
+    '```\n\n' +
+    'It opens a readiness report PR on `chore/production-prep` and turns must-fix findings ' +
+    'into new stories. Nothing else will run until you do.',
+  ]);
+  console.log('Opened the production-prep handoff issue.');
+} catch (e) {
+  console.error(`Could not open the handoff issue: ${e.message}`);
+  process.exit(1);
+}

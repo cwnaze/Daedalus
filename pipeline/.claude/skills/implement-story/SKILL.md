@@ -16,10 +16,10 @@ stop and let `pr-review` handle it; if not, reset it to `pending` and continue.
 Eligible = `status: pending` and every `dependsOn` is `done`. Take the first in array order.
 
 If none eligible and none pending: run `node .github/scripts/dispatch-next.mjs` and exit.
-That is the pipeline's natural terminus, and it reaches `production-prep` through the
-same gate as everything else. Do not dispatch `production-prep` directly — that path
-bypasses the pause switch and the guard that stops production-prep re-running while its
-report PR is still open, which is what turns the terminus into a loop.
+That is the pipeline's natural terminus. It does not start `production-prep` — that step
+is manual, and the script opens a `needs-human` issue asking the owner to run it. Do not
+dispatch `production-prep` yourself: it is the largest single quota spend in the
+pipeline, and starting it is the owner's call, not yours.
 
 Read the open `steering` issue. Treat unresolved comments as binding constraints —
 but only those whose `authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`.
