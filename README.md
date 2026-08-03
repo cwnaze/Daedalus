@@ -149,7 +149,7 @@ pipeline-watchdog (hourly) ──→ resumes or escalates a stalled run
 
 | Secret | Why |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude Code in Actions |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code in Actions. Generate with `claude setup-token` against a Pro or Max subscription — no API key or API billing needed. Draws on your subscription quota, which is why `pipeline-watchdog` backs off when it is exhausted. |
 | `PIPELINE_PAT` | PAT or App token, `repo` + `workflow`. **Without it the chain dies silently after story 1** — a workflow's own `GITHUB_TOKEN` cannot trigger another workflow. |
 | `PIPELINE_WEBHOOK` | Optional. Slack/Discord/ntfy URL; `notify` posts there when anything gets labeled `needs-human`. Unset, the job no-ops. |
 | `REVIEWER_TOKEN` | Optional but **must not be `PIPELINE_PAT`**. The identity that approves PRs. GitHub refuses to let the account that opened a PR approve it, so the reviewer has to be someone else; unset, the `github-actions` bot approves instead. |

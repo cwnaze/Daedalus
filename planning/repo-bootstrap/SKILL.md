@@ -118,7 +118,8 @@ that has genuinely already been decided.
 
 Run every check and report pass/fail. **Do not dispatch story 1 until all pass.**
 
-- [ ] `ANTHROPIC_API_KEY` exists as a repo secret
+- [ ] `CLAUDE_CODE_OAUTH_TOKEN` exists as a repo secret — generate it with `claude setup-token`
+      (Pro or Max subscription; it is not an API key and needs no Console billing).
 - [ ] `PIPELINE_PAT` exists as a repo secret — a PAT or GitHub App token with `repo` and
       `workflow` scope. **This is the failure everyone hits:** a workflow's own
       `GITHUB_TOKEN` cannot trigger another workflow, so without this the chain dies

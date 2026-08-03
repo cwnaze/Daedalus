@@ -7,6 +7,11 @@
  * hold: a long story is not a stalled story, which is why the check is anchored
  * to workflow activity rather than to elapsed time alone.
  *
+ * Auth is a Claude subscription OAuth token, so the pipeline shares one quota with
+ * everything else that token runs. Exhausting it looks exactly like a stall — the run
+ * dies, no event follows — and the naive response, re-dispatching, spends the quota
+ * that is already gone. So every dispatch below is gated on quotaBlocked().
+ *
  * Env: GH_TOKEN (PIPELINE_PAT), REPO, STALL_MINUTES, DRY_RUN
  */
 import { execFileSync } from 'node:child_process';
@@ -16,8 +21,82 @@ const repo = process.env.REPO;
 if (!repo) throw new Error('REPO is required');
 const stallMinutes = Number(process.env.STALL_MINUTES ?? 90);
 const dryRun = process.env.DRY_RUN === 'true';
+// Claude subscription quota refills on a rolling window. Used only when the failure
+// text names no explicit reset time.
+const windowHours = Number(process.env.QUOTA_WINDOW_HOURS ?? 5);
 
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
+
+/**
+ * Did the last Claude-backed run die on quota, and is that window still closed?
+ *
+ * There is no way to ask "how much quota is left" from CI — `/usage` is an in-session
+ * slash command, not a CLI subcommand — so this reads the evidence after the fact
+ * instead. That turns out to be the better signal anyway: it reports what actually
+ * happened rather than what a prediction says should have.
+ *
+ * Self-correcting by construction. Nothing is recorded; each hourly tick re-reads the
+ * same failed run and re-evaluates the deadline, so the pipeline resumes on the first
+ * tick after the window opens and stays quiet until then.
+ *
+ * @returns {Date|null} when the quota is expected back, or null if this is not a
+ *   quota failure at all.
+ */
+function rateLimitedUntil() {
+  const claudeWorkflows = ['story-start', 'pr-review', 'pr-fix', 'production-prep'];
+  let last;
+  try {
+    last = JSON.parse(
+      sh('gh', ['api', `repos/${repo}/actions/runs?status=completed&per_page=20`]),
+    ).workflow_runs
+      .filter((r) => claudeWorkflows.includes(r.name))
+      .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
+  } catch (e) {
+    console.error(`Could not list runs (${e.message}); assuming no rate limit.`);
+    return null;
+  }
+  if (!last || last.conclusion === 'success') return null;
+
+  let log = '';
+  try {
+    log = sh('gh', ['run', 'view', String(last.id), '--repo', repo, '--log-failed']);
+  } catch (e) {
+    // Logs expire, and a run cancelled before producing any are normal. Either way
+    // there is nothing to match, so fall through to the ordinary stall handling.
+    console.error(`Could not read logs for run ${last.id}: ${e.message}`);
+    return null;
+  }
+
+  if (!/usage limit reached|rate[ _-]?limit|quota exceeded|429/i.test(log)) return null;
+
+  // Claude reports its own reset time when it knows it ("limit will reset at 3pm",
+  // or an epoch). Prefer that over guessing at the window length.
+  const epoch = log.match(/reset[^\n]*?(\d{10,13})/i);
+  if (epoch) {
+    const ms = Number(epoch[1]);
+    return new Date(ms < 1e12 ? ms * 1000 : ms);
+  }
+  const iso = log.match(/reset[^\n]*?(\d{4}-\d{2}-\d{2}T[\d:]+(?:\.\d+)?Z?)/i);
+  if (iso) return new Date(iso[1]);
+
+  return new Date(new Date(last.updated_at).getTime() + windowHours * 3600_000);
+}
+
+/** Gate every dispatch: true means "quota is gone, do nothing this tick". */
+function quotaBlocked() {
+  const until = rateLimitedUntil();
+  if (!until || Number.isNaN(until.getTime())) return false;
+  if (until <= new Date()) {
+    console.log(`Quota window closed at ${until.toISOString()}, now past. Proceeding.`);
+    return false;
+  }
+  const mins = Math.round((until - Date.now()) / 60000);
+  console.log(
+    `Claude quota exhausted; expected back at ${until.toISOString()} (~${mins}m). ` +
+      `Not dispatching — the next hourly tick will re-check.`,
+  );
+  return true;
+}
 
 const db = JSON.parse(fs.readFileSync('stories.json', 'utf8'));
 const active = db.stories.filter((s) => ['in_progress', 'in_review', 'fixing'].includes(s.status));
@@ -25,6 +104,7 @@ const active = db.stories.filter((s) => ['in_progress', 'in_review', 'fixing'].i
 if (!active.length) {
   // Nothing in flight. Hand off to the normal decision — this also covers the
   // case where a dispatch itself was lost and no story ever started.
+  if (quotaBlocked()) process.exit(0);
   console.log('No story in flight; running the standard dispatch check.');
   process.exit(spawnDispatch());
 }
@@ -56,6 +136,8 @@ if (dryRun) {
   console.log('[dry run] stopping here.');
   process.exit(0);
 }
+
+if (quotaBlocked()) process.exit(0);
 
 if (story.status === 'in_progress') {
   // implement-story has crash-resume logic for exactly this: it finds the

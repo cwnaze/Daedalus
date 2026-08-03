@@ -33,5 +33,5 @@ while IFS= read -r key; do
 done < <(grep -E '^[A-Z0-9_]+=' .env.example | cut -d= -f1)
 
 echo "$count secret(s) synced."
-echo "Note: ANTHROPIC_API_KEY and PIPELINE_PAT are pipeline secrets, not app secrets."
+echo "Note: CLAUDE_CODE_OAUTH_TOKEN and PIPELINE_PAT are pipeline secrets, not app secrets."
 echo "Set those separately if you have not already."

@@ -42,7 +42,7 @@ jobs:
           restore-keys: demos-${{ github.base_ref }}-
       - uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # PIPELINE_PAT here so the findings issue it opens actually triggers
           # pr-fix — an issue created by GITHUB_TOKEN triggers nothing.
           github_token: ${{ secrets.PIPELINE_PAT }}
