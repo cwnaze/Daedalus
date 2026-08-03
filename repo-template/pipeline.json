@@ -1,0 +1,38 @@
+{
+  "$comment": [
+    "How this project is built, checked, and served. Written by stack-and-mcp-selection,",
+    "committed by repo-bootstrap. Every workflow reads it instead of assuming a stack.",
+    "",
+    "Two runtimes are in play and they are deliberately separate:",
+    "  - the PROJECT runtime, declared here, is whatever the app is written in;",
+    "  - the PIPELINE runtime is always Node, because the pipeline's own scripts and",
+    "    the Playwright demo harness are written in it.",
+    "A Go or Python project needs no Node of its own — the harness drives the app over",
+    "HTTP and does not care what serves the response.",
+    "",
+    "Replace this whole file for your stack. See docs/pipeline-examples/ for Python,",
+    "Go, Rust, Ruby, Java and static-site versions."
+  ],
+
+  "runtime": "node",
+  "version": "22",
+
+  "install": "npm ci",
+
+  "commands": {
+    "typecheck": "npm run check",
+    "lint": "npm run lint",
+    "build": "npm run build",
+    "test": "npm test"
+  },
+
+  "serve": {
+    "ci": "npm run build && npm run preview",
+    "dev": "npm run dev",
+    "url": "http://localhost:5173"
+  },
+
+  "services": null,
+
+  "existsWhen": "package.json"
+}

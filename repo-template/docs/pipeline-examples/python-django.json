@@ -1,0 +1,18 @@
+{
+  "runtime": "python",
+  "version": "3.12",
+  "install": "pip install -e .",
+  "commands": {
+    "typecheck": "",
+    "lint": "ruff check .",
+    "build": "python manage.py collectstatic --noinput",
+    "test": "python manage.py test"
+  },
+  "serve": {
+    "ci": "python manage.py runserver 0.0.0.0:8000 --noreload",
+    "dev": "python manage.py runserver 8000",
+    "url": "http://localhost:8000"
+  },
+  "services": "docker compose up -d --wait",
+  "existsWhen": "pyproject.toml"
+}

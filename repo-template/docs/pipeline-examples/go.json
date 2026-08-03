@@ -1,0 +1,18 @@
+{
+  "runtime": "go",
+  "version": "1.23",
+  "install": "go mod download",
+  "commands": {
+    "typecheck": "go vet ./...",
+    "lint": "golangci-lint run",
+    "build": "go build ./...",
+    "test": "go test ./..."
+  },
+  "serve": {
+    "ci": "go run ./cmd/server",
+    "dev": "go run ./cmd/server",
+    "url": "http://localhost:8080"
+  },
+  "services": null,
+  "existsWhen": "go.mod"
+}

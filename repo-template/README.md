@@ -5,10 +5,11 @@
 ## Development
 ```bash
 cp .env.example .env    # fill in values
-docker compose up -d
-npm install
-npm run dev
+docker compose up -d    # only if this project has a compose file
 ```
+Then run the `install` and `serve.dev` commands from `pipeline.json`;
+`node .github/scripts/read-manifest.mjs --print` prints them. That file is how the
+pipeline stays stack-agnostic — CI reads the same commands you do.
 
 ## Tests and demos
 ```bash

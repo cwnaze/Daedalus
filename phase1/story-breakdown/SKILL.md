@@ -60,7 +60,8 @@ moment in Phase 1.
 
 For every story, fill `verification`:
 
-- `commands` — typecheck/lint/build/unit commands that must pass
+- `commands` — typecheck/lint/build/unit commands that must pass. Use the ones declared
+  in `pipeline.json` rather than inventing per-story variants; that file is what CI runs
 - `specs` — Playwright spec paths. **Mandatory for any story with a user-facing
   surface.** These specs generate the demo docs and constitute the regression suite;
   a UI story without one is invisible to every later review.

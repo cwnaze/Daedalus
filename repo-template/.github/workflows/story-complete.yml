@@ -21,6 +21,12 @@ jobs:
         with:
           ref: main
           token: ${{ secrets.PIPELINE_PAT }}
+      # Only the pipeline runtime, like pipeline-watchdog: this job runs two .mjs
+      # scripts and never touches the project's toolchain. Pinned rather than
+      # relying on whatever Node the runner image happens to ship.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Mark story done, close its issue, log
         env:
           GH_TOKEN: ${{ secrets.PIPELINE_PAT }}

@@ -1,0 +1,129 @@
+name: setup-project
+description: >
+  Install the project's declared toolchain, its dependencies, and the pipeline's own
+  Node runtime. Every pipeline workflow starts with this, so adding a language means
+  editing pipeline.json rather than six workflows.
+
+inputs:
+  playwright:
+    description: Also install the Playwright browser. Only the jobs that run demos need it.
+    default: 'false'
+
+outputs:
+  scaffolded:
+    description: '"true" once the project actually exists, "false" before the first story creates it'
+    value: ${{ steps.manifest.outputs.scaffolded }}
+  serve-url:
+    description: The URL the app is served on, for demo specs
+    value: ${{ steps.manifest.outputs.serve_url }}
+
+runs:
+  using: composite
+  steps:
+    # Node is the pipeline's own runtime — the .mjs scripts and the Playwright
+    # harness — and is installed regardless of what the project is written in.
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - id: manifest
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -f pipeline.json ]; then
+          echo "::error::pipeline.json is missing. repo-bootstrap commits it; without it no workflow knows how to build this project."
+          exit 1
+        fi
+        node .github/scripts/read-manifest.mjs >> "$GITHUB_OUTPUT"
+        echo "--- toolchain ---"
+        node .github/scripts/read-manifest.mjs --print
+
+    # Each of these is a no-op unless the manifest names that runtime. Adding a
+    # language is one more block here plus one example manifest.
+    - if: steps.manifest.outputs.runtime == 'python'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ steps.manifest.outputs.version }}
+
+    - if: steps.manifest.outputs.runtime == 'go'
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ steps.manifest.outputs.version }}
+
+    - if: steps.manifest.outputs.runtime == 'ruby'
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ steps.manifest.outputs.version }}
+
+    - if: steps.manifest.outputs.runtime == 'java'
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ steps.manifest.outputs.version }}
+
+    - if: steps.manifest.outputs.runtime == 'dotnet'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ steps.manifest.outputs.version }}
+
+    - if: steps.manifest.outputs.runtime == 'rust'
+      shell: bash
+      run: rustup toolchain install ${{ steps.manifest.outputs.version }} --profile minimal
+
+    # 'node' needs nothing further — the pipeline's own setup-node above already
+    # provided it — unless the project pinned a different version than 22.
+    - if: steps.manifest.outputs.runtime == 'node' && steps.manifest.outputs.version != '22'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ steps.manifest.outputs.version }}
+
+    - name: Install project dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Before the scaffolding story runs there is no project to install, and an
+        # unconditional install would fail the pipeline's very first run.
+        if [ "${{ steps.manifest.outputs.scaffolded }}" != "true" ]; then
+          echo "Project not scaffolded yet (no ${{ steps.manifest.outputs.exists_when }}) — nothing to install."
+          exit 0
+        fi
+        if [ -z "${{ steps.manifest.outputs.install }}" ]; then
+          echo "No install command declared — skipping."
+          exit 0
+        fi
+        echo "::group::install"
+        ${{ steps.manifest.outputs.install }}
+        echo "::endgroup::"
+
+    - name: Install Playwright browser
+      if: inputs.playwright == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        # The demo harness is Node-based whatever the app is written in, so this
+        # is independent of the project runtime. A non-Node project keeps the
+        # harness's own package.json in e2e/ so it never pollutes the project.
+        if [ -f e2e/package.json ]; then
+          npm --prefix e2e ci
+          npm --prefix e2e exec -- playwright install --with-deps chromium
+        elif [ -f package.json ] && node -e "const p=require('./package.json');process.exit((p.devDependencies?.['@playwright/test']||p.dependencies?.['@playwright/test'])?0:1)" 2>/dev/null; then
+          npx playwright install --with-deps chromium
+        else
+          echo "No Playwright harness present yet — skipping browser install."
+        fi
+
+    - name: Start local services
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Most projects are hosted-SaaS only and need nothing here.
+        SERVICES='${{ steps.manifest.outputs.services }}'
+        if [ -n "$SERVICES" ]; then
+          echo "::group::services"
+          eval "$SERVICES"
+          echo "::endgroup::"
+        elif [ -f docker-compose.yml ] || [ -f compose.yml ]; then
+          docker compose up -d --wait
+        else
+          echo "No compose file and no services command — skipping."
+        fi

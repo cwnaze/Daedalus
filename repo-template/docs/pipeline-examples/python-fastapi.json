@@ -1,0 +1,18 @@
+{
+  "runtime": "python",
+  "version": "3.12",
+  "install": "pip install -r requirements.txt",
+  "commands": {
+    "typecheck": "mypy .",
+    "lint": "ruff check .",
+    "build": "",
+    "test": "pytest -q"
+  },
+  "serve": {
+    "ci": "uvicorn app.main:app --port 8000",
+    "dev": "uvicorn app.main:app --reload --port 8000",
+    "url": "http://localhost:8000"
+  },
+  "services": null,
+  "existsWhen": "requirements.txt"
+}

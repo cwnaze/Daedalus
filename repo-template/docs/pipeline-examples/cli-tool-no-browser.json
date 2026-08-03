@@ -1,0 +1,14 @@
+{
+  "runtime": "go",
+  "version": "1.23",
+  "install": "go mod download",
+  "commands": {
+    "typecheck": "go vet ./...",
+    "lint": "golangci-lint run",
+    "build": "go build -o bin/tool ./cmd/tool",
+    "test": "go test ./..."
+  },
+  "serve": null,
+  "services": null,
+  "existsWhen": "go.mod"
+}

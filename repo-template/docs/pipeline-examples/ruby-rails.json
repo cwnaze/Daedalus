@@ -1,0 +1,18 @@
+{
+  "runtime": "ruby",
+  "version": "3.3",
+  "install": "bundle install",
+  "commands": {
+    "typecheck": "",
+    "lint": "bundle exec rubocop",
+    "build": "bundle exec rails assets:precompile",
+    "test": "bundle exec rspec"
+  },
+  "serve": {
+    "ci": "bundle exec rails server -e production -p 3000",
+    "dev": "bundle exec rails server -p 3000",
+    "url": "http://localhost:3000"
+  },
+  "services": "docker compose up -d --wait",
+  "existsWhen": "Gemfile"
+}

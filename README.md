@@ -21,6 +21,13 @@ Prerequisites: `claude`, `gh` (authenticated), `git`, `node`, `jq`.
 **Phase 2/3 is not installed globally.** `repo-bootstrap` copies `repo-template/` into
 each project repo, so you can edit a project's pipeline without forking this one.
 
+**Any stack.** The pipeline is not Node-specific. `pipeline.json` at the project root
+declares the runtime, install command, check commands, and how the app is served; every
+workflow reads it through the `setup-project` composite action. Python, Go, Rust, Ruby,
+Java, static sites and CLIs with no web surface are covered by examples in
+`repo-template/docs/pipeline-examples/`. Supporting a new language is one manifest plus
+one `if:` block, not a fork.
+
 ## Run
 
 ```
@@ -92,8 +99,10 @@ repo-template/
   .github/workflows/{ci,story-start,pr-review,pr-fix,story-complete,production-prep}.yml
   .github/workflows/{pipeline-watchdog,notify}.yml
   .github/scripts/{complete-story,dispatch-next,watchdog,validate-stories,write-env}.mjs
+  .github/actions/setup-project/  pipeline.json
   e2e/{demo.ts,example.spec.ts}   playwright.config.ts
   scripts/sync-secrets.sh         .env.example
+  docs/pipeline-examples/         # manifests for python, go, rust, ruby, java, static, cli
   CLAUDE.md  README.md  stories.example.json  docs/{pipeline-log.md,demos/README.md}
 ```
 
@@ -147,6 +156,14 @@ armed at PR-open fires before any review has started.
 the steering issue, PR comments, and the diff. Only `OWNER`/`MEMBER`/`COLLABORATOR`
 authors are treated as instruction; everything else is data. On a public repo the
 unfiltered version means a stranger's comment is a prompt to a privileged agent.
+
+**Why the toolchain is data, not workflow code.** The stack appeared in seven places —
+five workflows, the Playwright config, and the CI job — so supporting Python meant seven
+edits and seven chances to disagree. `pipeline.json` states it once and everything reads
+it. The two runtimes stay separate on purpose: the project's runtime is whatever the app
+is written in, while the pipeline's is always Node, because its scripts and the demo
+harness are. Playwright drives the app over HTTP and does not care what answers, so a Go
+service gets browser demos without Node ever entering its `go.mod`.
 
 **Why the loop terminates at 3 rounds.** Review → fix → review will cycle indefinitely
 on anything the reviewer is subtly wrong about. Round 3 hard-stops to `needs-human`.

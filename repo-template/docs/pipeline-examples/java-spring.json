@@ -1,0 +1,18 @@
+{
+  "runtime": "java",
+  "version": "21",
+  "install": "./mvnw -B dependency:go-offline",
+  "commands": {
+    "typecheck": "",
+    "lint": "./mvnw -B checkstyle:check",
+    "build": "./mvnw -B package -DskipTests",
+    "test": "./mvnw -B test"
+  },
+  "serve": {
+    "ci": "java -jar target/app.jar",
+    "dev": "./mvnw spring-boot:run",
+    "url": "http://localhost:8080"
+  },
+  "services": "docker compose up -d --wait",
+  "existsWhen": "pom.xml"
+}

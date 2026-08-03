@@ -27,6 +27,8 @@ CLAUDE.md                     # conventions + definition of done + version warni
 .env.example                  # from project-docs; the env contract for local + CI
 stories.json                  # spine repo only
 .mcp.json                     # from stack-and-mcp-selection
+pipeline.json                 # toolchain manifest — every workflow reads it
+.github/actions/setup-project/ # composite action that installs the declared toolchain
 docs/                         # trimmed working copies from project-docs
 docs/pipeline-log.md          # append-only audit log, seeded with the bootstrap entry
 docs/demos/                   # empty, with a README explaining these are generated
@@ -42,6 +44,7 @@ README.md
 
 **Split-repo rule: the pipeline lives in the spine repo only.** The spine gets
 everything above. A non-spine repo gets `CLAUDE.md`, `.env.example`, `.mcp.json`,
+its own `pipeline.json` (a split project's two repos rarely share a stack),
 `docs/`, the `e2e/` harness, `scripts/`, and `ci.yml` — and **none** of
 `story-start`, `pr-review`, `pr-fix`, `story-complete`, `production-prep`,
 `pipeline-watchdog`, or `.github/scripts/`.
@@ -96,6 +99,8 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
 - [ ] `ci` is in the required status checks for `main`. It is the deterministic gate and
       the thing that stops auto-merge from firing before review runs
 - [ ] `node .github/scripts/validate-stories.mjs` passes on the committed `stories.json`
+- [ ] `node .github/scripts/read-manifest.mjs --print` shows the right toolchain. Every
+      workflow reads `pipeline.json`; a wrong command there fails all of them identically
 - [ ] A reviewer identity exists that is **not** `PIPELINE_PAT`: either leave
       `REVIEWER_TOKEN` unset and let the `github-actions` bot approve, or set it to a
       second PAT. GitHub refuses to let the account that opened a PR approve it, so

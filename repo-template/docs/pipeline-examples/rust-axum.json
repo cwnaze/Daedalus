@@ -1,0 +1,18 @@
+{
+  "runtime": "rust",
+  "version": "stable",
+  "install": "cargo fetch",
+  "commands": {
+    "typecheck": "cargo check",
+    "lint": "cargo clippy -- -D warnings",
+    "build": "cargo build --release",
+    "test": "cargo test"
+  },
+  "serve": {
+    "ci": "./target/release/server",
+    "dev": "cargo run",
+    "url": "http://localhost:3000"
+  },
+  "services": null,
+  "existsWhen": "Cargo.toml"
+}

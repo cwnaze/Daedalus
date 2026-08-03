@@ -41,6 +41,19 @@ Append any new mapping you discovered to `references/mcp-map.md`. This file is t
 
 **`~/Notes/<project-slug>-stack.md`** — frontmatter `tags: [project/<slug>, type/stack, status/active]`. Stack table with reasoning, MCP server list, version-risk warnings.
 
+**`pipeline.json`** staged at `/tmp/<project-slug>/pipeline.json`. This is what makes the
+pipeline stack-agnostic: every workflow reads it instead of assuming a language. Fill in
+the runtime and version you just chose, the install command, the typecheck/lint/build/test
+commands, and how the app is served in CI versus dev.
+
+Start from the closest file in `repo-template/docs/pipeline-examples/` rather than writing
+one from memory — they cover Python, Go, Rust, Ruby, Java, static sites, and CLIs with no
+web surface at all. Leave a command empty rather than inventing one; empty means "skip",
+and a wrong command fails every CI run until someone notices.
+
+If the project has no web surface, omit `serve` entirely and tell `story-breakdown` that
+every story is `demoKind: "command"`.
+
 **`.mcp.json`** staged at `/tmp/<project-slug>/mcp.json` for `repo-bootstrap` to commit:
 
 ```json

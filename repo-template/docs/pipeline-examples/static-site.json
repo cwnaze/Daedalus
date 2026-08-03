@@ -1,0 +1,18 @@
+{
+  "runtime": "none",
+  "version": "",
+  "install": "",
+  "commands": {
+    "typecheck": "",
+    "lint": "",
+    "build": "",
+    "test": ""
+  },
+  "serve": {
+    "ci": "npx --yes http-server . -p 8080 --silent",
+    "dev": "npx --yes http-server . -p 8080 --silent",
+    "url": "http://localhost:8080"
+  },
+  "services": null,
+  "existsWhen": "index.html"
+}

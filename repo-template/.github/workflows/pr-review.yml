@@ -27,36 +27,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup-project
         with:
-          node-version: 22
-      - name: Install dependencies (skipped before the app is scaffolded)
-        run: |
-          # Story 1 creates package.json. Until then there is nothing to install,
-          # and an unconditional `npm ci` fails the very first run of the pipeline.
-          if [ -f package-lock.json ]; then
-            npm ci
-            npx playwright install --with-deps chromium
-          elif [ -f package.json ]; then
-            npm install
-            npx playwright install --with-deps chromium
-          else
-            echo "No package.json yet — this is the scaffolding story."
-          fi
+          playwright: 'true'
       - name: Materialize .env from repo secrets
         env:
           ALL_SECRETS: ${{ toJSON(secrets) }}
         run: node .github/scripts/write-env.mjs
-
-      - name: Start local services (only if this project has any)
-        run: |
-          # Most projects are hosted-SaaS only (Turso, Resend, R2) and need
-          # nothing here. This is a no-op unless a compose file exists.
-          if [ -f docker-compose.yml ] || [ -f compose.yml ]; then
-            docker compose up -d --wait
-          else
-            echo "No compose file — skipping."
-          fi
       - name: Restore previous demo screenshots
         uses: actions/cache@v4
         with:

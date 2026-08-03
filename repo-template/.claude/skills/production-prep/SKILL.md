@@ -20,7 +20,9 @@ fixed anyway.
 
 Four subagents, each returning a findings file path only.
 
-**Security** — `gh api` dependency alerts and `npm audit`; secret scan across **full git
+**Security** — `gh api` dependency alerts and the ecosystem's own audit tool
+(`npm audit`, `pip-audit`, `govulncheck`, `cargo audit`, `bundle audit` — match
+`pipeline.json`'s runtime); secret scan across **full git
 history**, not just the tree; authz check on every endpoint against `docs/*-security.md`;
 input validation at every boundary; rate limiting on public and expensive endpoints;
 security headers and CORS; and specifically re-examine anything a per-story review waved

@@ -25,9 +25,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+
+      - id: setup
+        uses: ./.github/actions/setup-project
 
       - name: Validate the pipeline state file
         run: |
@@ -37,32 +37,32 @@ jobs:
             node .github/scripts/validate-stories.mjs
           fi
 
-      - name: Install dependencies (skipped before the app is scaffolded)
-        run: |
-          # Story 1 creates package.json. Until then there is nothing to check,
-          # and this job still has to report success or it blocks its own PR.
-          if [ -f package-lock.json ]; then
-            npm ci
-          elif [ -f package.json ]; then
-            npm install
-          else
-            echo "No package.json yet — this is the scaffolding story."
-          fi
-
       - name: Typecheck, lint, build
+        env:
+          TYPECHECK: ${{ steps.setup.outputs.cmd_typecheck }}
+          LINT: ${{ steps.setup.outputs.cmd_lint }}
+          BUILD: ${{ steps.setup.outputs.cmd_build }}
         run: |
-          if [ ! -f package.json ]; then
-            echo "Nothing to check yet."
+          set -uo pipefail
+          if [ "${{ steps.setup.outputs.scaffolded }}" != "true" ]; then
+            echo "Project not scaffolded yet — nothing to check."
             exit 0
           fi
-          # Run whichever of these the project actually defines. A project that
-          # has not added `lint` yet should not fail on its absence.
-          for script in check lint build; do
-            if node -e "process.exit(require('./package.json').scripts?.['$script'] ? 0 : 1)"; then
-              echo "::group::npm run $script"
-              npm run "$script"
-              echo "::endgroup::"
-            else
-              echo "No \"$script\" script — skipping."
+          # Whatever the manifest declares, in whatever language. A project that
+          # has no separate typecheck or lint step leaves it empty rather than
+          # failing on its absence.
+          failed=0
+          for name in TYPECHECK LINT BUILD; do
+            cmd="${!name}"
+            if [ -z "$cmd" ]; then
+              echo "No $name command declared — skipping."
+              continue
             fi
+            echo "::group::$name: $cmd"
+            if ! eval "$cmd"; then
+              echo "::error::$name failed: $cmd"
+              failed=1
+            fi
+            echo "::endgroup::"
           done
+          exit $failed
