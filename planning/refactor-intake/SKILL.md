@@ -5,7 +5,7 @@ description: Turn a stated intent to refactor, modernize, or extend an existing 
 
 # Refactor Intake
 
-Phase 1, step 2 of 5 for an existing project. The brownfield counterpart to the
+Planning, step 2 of 5 for an existing project. The brownfield counterpart to the
 constraints half of `project-intake`.
 
 Greenfield intake asks what to build. Here that is already decided — the code exists.

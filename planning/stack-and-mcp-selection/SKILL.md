@@ -5,7 +5,7 @@ description: Choose the technology stack for a new project and determine which M
 
 # Stack and MCP Selection
 
-Phase 1, step 2 of 5. Reads the intake document, proposes a stack, and produces the `.mcp.json` the repos will carry.
+Planning, step 2 of 5. Reads the intake document, proposes a stack, and produces the `.mcp.json` the repos will carry.
 
 ## Procedure
 
@@ -46,7 +46,7 @@ pipeline stack-agnostic: every workflow reads it instead of assuming a language.
 the runtime and version you just chose, the install command, the typecheck/lint/build/test
 commands, and how the app is served in CI versus dev.
 
-Start from the closest file in `repo-template/docs/pipeline-examples/` rather than writing
+Start from the closest file in `pipeline/docs/pipeline-examples/` rather than writing
 one from memory — they cover Python, Go, Rust, Ruby, Java, static sites, and CLIs with no
 web surface at all. Leave a command empty rather than inventing one; empty means "skip",
 and a wrong command fails every CI run until someone notices.

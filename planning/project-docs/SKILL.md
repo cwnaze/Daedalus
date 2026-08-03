@@ -5,7 +5,7 @@ description: Generate the full technical documentation set for a new project —
 
 # Project Docs
 
-Phase 1, step 3 of 5. Fans documentation generation out to subagents so the
+Planning, step 3 of 5. Fans documentation generation out to subagents so the
 orchestrating session never holds every document at once.
 
 ## Non-negotiables

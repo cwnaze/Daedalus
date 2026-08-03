@@ -1,11 +1,11 @@
 ---
 name: repo-bootstrap
-description: Clone the project repos, commit the pipeline scaffold (CLAUDE.md, stories.json, workflows, skills, docs) directly to main, verify the automation chain actually fires, and dispatch the first story. Use as the final Phase 1 step, or whenever the user says the repos are created and ready, provides SSH URLs, or types /repo-bootstrap.
+description: Clone the project repos, commit the pipeline scaffold (CLAUDE.md, stories.json, workflows, skills, docs) directly to main, verify the automation chain actually fires, and dispatch the first story. Use as the final planning step, or whenever the user says the repos are created and ready, provides SSH URLs, or types /repo-bootstrap.
 ---
 
 # Repo Bootstrap
 
-Phase 1, step 5 of 5. The handoff from your machine to GitHub Actions. After this
+Planning, step 5 of 5. The handoff from your machine to GitHub Actions. After this
 skill, nothing local is required.
 
 ## Procedure

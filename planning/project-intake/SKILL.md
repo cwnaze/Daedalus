@@ -5,7 +5,7 @@ description: Run the clarification and idea-refinement interview that opens a ne
 
 # Project Intake
 
-Phase 1, step 1 of 5. Turns a rough project idea into an approved intake document.
+Planning, step 1 of 5. Turns a rough project idea into an approved intake document.
 
 ## Non-negotiables
 

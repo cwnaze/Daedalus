@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Install the Phase 1 skills into ~/.claude/skills.
+# Install the planning skills into ~/.claude/skills.
 #
-# Phase 2/3 lives in repo-template/ and is NOT installed globally — repo-bootstrap
+# The pipeline/ tree is NOT installed globally — repo-bootstrap
 # copies it into each new project repo, so it can be edited per-project without
 # forking this repo.
 set -euo pipefail
@@ -18,7 +18,7 @@ Usage: ./install.sh [options]
   --link      Symlink instead of copying, so edits in this repo take effect
               immediately. Recommended while you are still iterating.
   --force     Overwrite existing skills of the same name without asking.
-  --uninstall Remove the Phase 1 skills from ~/.claude/skills.
+  --uninstall Remove the planning skills from ~/.claude/skills.
   --check     Verify prerequisites and print what would happen. No changes.
   -h, --help  This.
 
@@ -60,7 +60,7 @@ check_prereqs() {
   if [ -d "$HOME/Notes" ]; then
     echo "  ok      vault at ~/Notes"
   else
-    echo "  note    ~/Notes not found — Phase 1 writes docs there; set VAULT_DIR or create it"
+    echo "  note    ~/Notes not found — planning writes docs there; set VAULT_DIR or create it"
   fi
 
   return $ok
@@ -93,7 +93,7 @@ echo "Prerequisites:"
 if ! check_prereqs; then
   echo
   echo "Install the missing tools above, then re-run. (Skills will still install," \
-       "but Phase 1 will fail partway without them.)"
+       "but planning will fail partway without them.)"
   if [ "$FORCE" -eq 0 ]; then
     read -rp "Continue anyway? [y/N] " reply
     [[ "$reply" =~ ^[Yy]$ ]] || exit 1
@@ -104,7 +104,7 @@ echo
 mkdir -p "$DEST"
 
 for s in "${SKILLS[@]}"; do
-  if [ ! -d "$SRC/phase1/$s" ]; then
+  if [ ! -d "$SRC/planning/$s" ]; then
     echo "  ERROR   $s missing from repo — is this a full clone?"
     exit 1
   fi
@@ -118,10 +118,10 @@ for s in "${SKILLS[@]}"; do
   fi
 
   if [ "$MODE" = "link" ]; then
-    ln -s "$SRC/phase1/$s" "$DEST/$s"
+    ln -s "$SRC/planning/$s" "$DEST/$s"
     echo "  linked  $s"
   else
-    cp -r "$SRC/phase1/$s" "$DEST/$s"
+    cp -r "$SRC/planning/$s" "$DEST/$s"
     echo "  copied  $s"
   fi
 done
@@ -129,7 +129,8 @@ done
 echo
 echo "Installed to $DEST"
 echo
-echo "Start a project:  claude  →  /project-intake"
+echo "New project:        claude  →  /project-intake"
+echo "Existing codebase:  claude  →  /codebase-inventory"
 if [ "$MODE" = "copy" ]; then
   echo "Editing the skills? Re-run with --link so changes here take effect immediately."
 fi

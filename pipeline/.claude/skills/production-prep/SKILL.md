@@ -5,7 +5,7 @@ description: Run the whole-repo production readiness pass after every story is d
 
 # Production Prep
 
-Phase 3. **This one is a fan-out**, unlike `pr-review` — the passes are independent and
+The pipeline's terminus. **This one is a fan-out**, unlike `pr-review` — the passes are independent and
 whole-repo rather than diff-scoped, so parallel subagents are the right shape here.
 
 Runs on branch `chore/production-prep`.

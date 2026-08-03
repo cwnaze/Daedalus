@@ -1,6 +1,6 @@
 # stories.json schema
 
-The single source of truth for Phase 2. Lives at the repo root of the **spine repo**
+The single source of truth for the running pipeline. Lives at the repo root of the **spine repo**
 (the only repo that carries it, even in split frontend/backend projects).
 
 ## Top level

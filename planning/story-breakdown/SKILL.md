@@ -5,7 +5,7 @@ description: Decompose a documented project into an ordered, dependency-aware se
 
 # Story Breakdown
 
-Phase 1, step 4 of 5. Produces `stories.json` — the state machine every Phase 2
+Planning, step 4 of 5. Produces `stories.json` — the state machine every pipeline
 workflow reads and writes.
 
 ## Brownfield mode
@@ -88,7 +88,7 @@ Newly added stories usually sort to the front (CI, secrets, error handling) or t
 them to the end of the list.
 
 Show the user the sweep table before writing the file. This is the highest-value review
-moment in Phase 1.
+moment in planning.
 
 ## Pass 3 — verification planning
 

@@ -2,8 +2,8 @@
 /**
  * Structural validation of stories.json.
  *
- * Everything here is a defect that Phase 1 introduced but that only surfaces in
- * Phase 2 as confusing behaviour rather than as an error. A dependsOn cycle is
+ * Everything here is a defect that planning introduced but that only surfaces in
+ * the pipeline as confusing behaviour rather than as an error. A dependsOn cycle is
  * the clearest case: the dispatcher correctly reports "no eligible story and
  * nothing running", which is true, unhelpful, and names the symptom instead of
  * the cause.

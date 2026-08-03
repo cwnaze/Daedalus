@@ -5,7 +5,7 @@ description: Survey an existing codebase and produce the inventory, toolchain ma
 
 # Codebase Inventory
 
-Phase 1, step 1 of 5 for an **existing** project. The brownfield counterpart to
+Planning, step 1 of 5 for an **existing** project. The brownfield counterpart to
 `project-intake`: where that interviews the user about an idea, this reads the code.
 
 The distinction matters because on a brownfield project the answers already exist. The
