@@ -66,7 +66,13 @@ one `if:` block, not a fork.
 
 ## Run
 
-**New project:**
+Two entry points. Both converge on the same last three steps, and both end with the
+pipeline running itself.
+
+### Starting a New Project
+
+For a repository that does not exist yet, or an empty one.
+
 ```
 /project-intake            # interview → ~/Notes/<slug>-intake.md
 /stack-and-mcp-selection   # stack + .mcp.json + pipeline.json
@@ -75,18 +81,45 @@ one `if:` block, not a fork.
 /repo-bootstrap            # commit scaffold, populate .env, verify pipeline, dispatch story 1
 ```
 
-**Existing project** — refactor, modernize, or just bring it under the pipeline:
+Each step stops and asks for approval before the next. `project-intake` will not
+terminate on a question count — it terminates when you say the restatement is right.
+
+### Continuing an Existing Project
+
+For a repository that already has code: refactoring it, modernizing it, extending it, or
+simply bringing it under the pipeline.
+
 ```
 /codebase-inventory        # read the repo: toolchain, surface, build status, risk
 /refactor-intake           # goal, invariants, verification strategy
 /project-docs              # same skill, brownfield mode: derived from code, not invented
 /story-breakdown           # same skill, characterization specs first
-/repo-bootstrap            # same skill, non-destructive: PR, never overwrite
+/repo-bootstrap            # same skill, non-destructive: PR, never overwrites
 ```
 
-The two tracks share their last three steps. The difference is that the brownfield track
-reads answers out of the code instead of interviewing you for them, and it will not let a
-refactor story start until the characterization specs covering that area are done.
+Three differences worth knowing before you start:
+
+**It reads instead of asking.** `codebase-inventory` derives the toolchain from your
+repo's own manifest files, maps the routes and data model out of the code, and **runs
+your build**, recording what actually happened. Questions are limited to what the
+repository genuinely cannot answer. Where detection is unsure it says so rather than
+guessing.
+
+**Characterization specs come first.** The pipeline's safety comes from re-running every
+done story's proof on every later PR — a suite your project does not have yet. So
+`story-breakdown` inserts a pass that writes specs pinning current behaviour (including
+behaviour that is wrong, pinned deliberately), and `dependsOn` forbids any refactor story
+from starting until the characterization covering its area is done. This is the main
+reason a refactor takes longer than it looks, and it is not optional.
+
+**Bootstrap never overwrites.** On a repo with history, `repo-bootstrap` works on a
+branch and opens a PR instead of committing to `main`. Existing files are merged
+additively where the format allows; where it does not, its version lands alongside as
+`<name>.pipeline` for you to reconcile. It checks for workflow name collisions first —
+an existing `ci.yml` is the common case, and silently replacing your real CI would be the
+worst thing it could do.
+
+### Both tracks
 
 `project-docs` writes `.env.example` from the infrastructure doc. `repo-bootstrap` then
 stops and waits: copy it to `.env`, fill in the values, and it runs
@@ -217,7 +250,7 @@ is written in, while the pipeline's is always Node, because its scripts and the 
 harness are. Playwright drives the app over HTTP and does not care what answers, so a Go
 service gets browser demos without Node ever entering its `go.mod`.
 
-**Why brownfield is a separate entry, not a flag.** The two tracks ask opposite
+**Why "Continuing an Existing Project" is a separate entry, not a flag.** The two tracks ask opposite
 questions. Greenfield intake asks what to build; on an existing codebase that is already
 decided and the load-bearing questions are what must *not* change and how anyone would
 know if it did. Detection is dynamic — `detect-stack.mjs` reads whatever marker files the
