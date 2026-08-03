@@ -20,7 +20,34 @@ Do not proceed on a guessed URL.
 
 ### 2. Clone and assemble
 
-Clone into `/tmp/<slug>/repos/`. Commit to `main` directly:
+**Existing repositories: never commit to `main`, and never overwrite.**
+
+Committing the scaffold straight to `main` is safe on an empty repo and destructive on a
+populated one — the file list below includes `README.md`, `.gitignore`, and `CLAUDE.md`,
+all of which a real project already has and none of which you may clobber.
+
+On any repo with existing history:
+
+1. Work on a branch, `chore/pipeline-bootstrap`, and open a PR. The user reviews the
+   whole scaffold before it lands, which is the same standard the pipeline holds itself
+   to for every other change.
+2. For each file below, if it already exists: **do not overwrite it.** Merge additively
+   where the format allows (append to `.gitignore`, add a section to `README.md`), and
+   where it does not, write yours alongside as `<name>.pipeline` and list every one of
+   them for the user to reconcile.
+3. `pipeline.json` comes from `codebase-inventory`, confirmed against a build you
+   actually ran — not from the greenfield template.
+4. Check for workflow name collisions before copying `.github/workflows/`. An existing
+   `ci.yml` is the common case, and silently replacing a project's real CI is the worst
+   possible failure here.
+5. Report the full list of files added, files merged, and files left alone, before the
+   PR is opened.
+
+The verification checklist in step 4 still applies in full, and the dry run in step 5
+matters more here, not less.
+
+**Empty repositories**, and only those: clone into `/tmp/<slug>/repos/` and commit to
+`main` directly:
 
 ```
 CLAUDE.md                     # conventions + definition of done + version warnings

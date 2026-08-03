@@ -8,6 +8,35 @@ description: Decompose a documented project into an ordered, dependency-aware se
 Phase 1, step 4 of 5. Produces `stories.json` — the state machine every Phase 2
 workflow reads and writes.
 
+## Brownfield mode
+
+If `~/Notes/<slug>-inventory.md` exists, the project already runs and the decomposition
+changes shape. Insert a pass before everything else, and treat it as non-negotiable:
+
+**Pass 0 — characterization.** Before any story changes behaviour, stories that *pin*
+current behaviour. Each one writes specs against the system as it is today — including
+behaviour that is wrong, which gets pinned too and a comment saying so. They change no
+production code.
+
+The sequencing rule: **a refactor story may not be `pending` until the characterization
+story covering its area is `done`.** Wire that with `dependsOn`. Without it the pipeline
+refactors code it cannot prove it did not break, and the regression suite that makes the
+whole loop safe simply is not there yet.
+
+Order characterization by the inventory's risk surface, highest first. Cover the flows
+named in refactor-intake's invariants before anything else — those are the ones with
+external consumers, where a silent break is discovered by someone else.
+
+Two things not to do. Do not write characterization specs for areas nothing will touch;
+this is a safety net, not a coverage drive. Do not fold characterization into the
+refactor story that needs it — a spec written after the change pins the new behaviour
+and proves nothing.
+
+For behaviour that refactor-intake lists as *intentionally* changing, the characterization
+spec pins today's behaviour and the refactor story updates it in the same PR that changes
+it. That diff is the reviewable record of an intended change, which is exactly what you
+want a human to see.
+
 ## Two passes, both mandatory
 
 Pass one builds the app. Pass two builds the *project*. Skipping pass two is the
@@ -33,6 +62,11 @@ Each story must be:
 
 Foundation stories come first and are exempt from "demoable via UI" — they get
 command-output demos instead (provisioning, scaffolding, schema baselines).
+
+In brownfield mode the foundation is different: the project exists, so the equivalent
+first stories are whatever the inventory found broken or missing — a build that does not
+pass, absent CI, undocumented env vars. Fix those before refactoring, and if the build is
+red on `main`, that is story 1 without exception.
 
 Acceptance criteria are **product-specific only**. Do not write "typecheck passes" or
 "verify in browser" into individual stories — those live once in `CLAUDE.md` as the

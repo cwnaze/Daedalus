@@ -30,13 +30,27 @@ one `if:` block, not a fork.
 
 ## Run
 
+**New project:**
 ```
 /project-intake            # interview → ~/Notes/<slug>-intake.md
-/stack-and-mcp-selection   # stack + .mcp.json
+/stack-and-mcp-selection   # stack + .mcp.json + pipeline.json
 /project-docs              # 6 docs, vault long-form + repo trimmed
 /story-breakdown           # stories.json + coverage sweep
 /repo-bootstrap            # commit scaffold, populate .env, verify pipeline, dispatch story 1
 ```
+
+**Existing project** — refactor, modernize, or just bring it under the pipeline:
+```
+/codebase-inventory        # read the repo: toolchain, surface, build status, risk
+/refactor-intake           # goal, invariants, verification strategy
+/project-docs              # same skill, brownfield mode: derived from code, not invented
+/story-breakdown           # same skill, characterization specs first
+/repo-bootstrap            # same skill, non-destructive: PR, never overwrite
+```
+
+The two tracks share their last three steps. The difference is that the brownfield track
+reads answers out of the code instead of interviewing you for them, and it will not let a
+refactor story start until the characterization specs covering that area are done.
 
 `project-docs` writes `.env.example` from the infrastructure doc. `repo-bootstrap` then
 stops and waits: copy it to `.env`, fill in the values, and it runs
@@ -92,6 +106,7 @@ the `needs-human` label.
 install.sh
 phase1/
   project-intake/            stack-and-mcp-selection/   (+ references/mcp-map.md)
+  codebase-inventory/        (+ detect-stack.mjs)       refactor-intake/
   project-docs/              story-breakdown/           (+ references/coverage.md,
   repo-bootstrap/                                          references/stories-schema.md)
 repo-template/
@@ -164,6 +179,21 @@ it. The two runtimes stay separate on purpose: the project's runtime is whatever
 is written in, while the pipeline's is always Node, because its scripts and the demo
 harness are. Playwright drives the app over HTTP and does not care what answers, so a Go
 service gets browser demos without Node ever entering its `go.mod`.
+
+**Why brownfield is a separate entry, not a flag.** The two tracks ask opposite
+questions. Greenfield intake asks what to build; on an existing codebase that is already
+decided and the load-bearing questions are what must *not* change and how anyone would
+know if it did. Detection is dynamic — `detect-stack.mjs` reads whatever marker files the
+repo has and reports what it could not determine rather than guessing, because a wrong
+build command fails every CI run identically and is tedious to trace back.
+
+**Why characterization specs come first.** The pipeline's safety rests on the regression
+suite: `pr-review` re-runs every done story's specs, so story 20 cannot silently break
+story 3. A brownfield project starts with no such suite over code that already has users.
+So Pass 0 writes specs that pin current behaviour — including behaviour that is wrong,
+pinned deliberately — and `dependsOn` forbids a refactor story from starting until the
+characterization covering its area is done. Without that ordering the pipeline refactors
+code it cannot prove it did not break.
 
 **Why the loop terminates at 3 rounds.** Review → fix → review will cycle indefinitely
 on anything the reviewer is subtly wrong about. Round 3 hard-stops to `needs-human`.

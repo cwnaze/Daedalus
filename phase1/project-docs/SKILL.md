@@ -21,7 +21,25 @@ orchestrating session never holds every document at once.
 
 ### 1. Read inputs
 
-`~/Notes/<slug>-intake.md` and `~/Notes/<slug>-stack.md`. Both must exist.
+**Greenfield:** `~/Notes/<slug>-intake.md` and `~/Notes/<slug>-stack.md`. Both must exist.
+
+**Brownfield** (an existing codebase): `~/Notes/<slug>-inventory.md` and
+`~/Notes/<slug>-refactor-intake.md` instead. If those exist, you are in brownfield mode
+and the rule below governs everything that follows.
+
+**In brownfield mode the docs are derived, not designed.** The data model is whatever
+the schema says, the API surface is whatever the routes expose, the security model is
+whatever the code actually enforces. Subagents must read the code and write down what is
+there — including the parts that are wrong.
+
+This is the opposite of the greenfield instinct and it is the whole point: a document
+describing the system you wish you had is worse than no document, because every later
+agent trusts it and reports the difference as *their* mistake. Record what exists;
+`refactor-intake` already says what is changing.
+
+Mark each document's sections as `current` or `target`, and for `target` cite the
+refactor-intake line that authorized the change. A target with no citation is a design
+you invented — delete it.
 
 ### 2. Dispatch subagents in parallel
 

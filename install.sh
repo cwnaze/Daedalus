@@ -18,7 +18,7 @@ Usage: ./install.sh [options]
   --link      Symlink instead of copying, so edits in this repo take effect
               immediately. Recommended while you are still iterating.
   --force     Overwrite existing skills of the same name without asking.
-  --uninstall Remove the five Phase 1 skills from ~/.claude/skills.
+  --uninstall Remove the Phase 1 skills from ~/.claude/skills.
   --check     Verify prerequisites and print what would happen. No changes.
   -h, --help  This.
 
@@ -27,7 +27,10 @@ Env:
 USAGE
 }
 
-SKILLS=(project-intake stack-and-mcp-selection project-docs story-breakdown repo-bootstrap)
+# Two entry points, one shared tail. project-intake starts a new project;
+# codebase-inventory starts from an existing one. Both converge on project-docs.
+SKILLS=(project-intake stack-and-mcp-selection codebase-inventory refactor-intake
+        project-docs story-breakdown repo-bootstrap)
 
 check_prereqs() {
   local ok=0
