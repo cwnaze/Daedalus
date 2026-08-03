@@ -59,8 +59,18 @@ if the vault is reachable (it usually is not, from CI — the repo copy is autho
 ## 5. Feed must-fix back into the loop
 
 Append every must-fix finding to `stories.json` as a new story with `dependsOn: []` and
-`status: pending`, then dispatch `story-start`. They go through branches, PRs, and review
-like everything else.
+`status: pending`. They go through branches, PRs, and review like everything else.
+
+**Commit that to `main` directly, not to this branch**, in its own commit with a
+`docs/pipeline-log.md` line — the same rule every other transition follows. `stories.json`
+is only ever read from `main`; new stories left on `chore/production-prep` are invisible
+to the dispatcher, which then sees an all-done board and re-dispatches production-prep,
+which appends them again. That loop is the reason this is a hard rule and not a
+preference.
+
+Then dispatch via `node .github/scripts/dispatch-next.mjs`. Do not call
+`gh api ... dispatches` yourself: that script is where the pause switch, the stuck-story
+check, and the run ceiling live.
 
 Do not hand-fix them in this branch. The loop exists precisely so that late-discovered
 work gets the same verification as everything else — bypassing it here is how the most

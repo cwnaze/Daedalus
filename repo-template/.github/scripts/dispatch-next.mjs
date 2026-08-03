@@ -29,7 +29,19 @@ const dispatch = (event) => {
     console.log(`[dry run] would dispatch: ${event}`);
     return;
   }
-  sh('gh', ['api', `repos/${repo}/dispatches`, '-f', `event_type=${event}`]);
+  try {
+    sh('gh', ['api', `repos/${repo}/dispatches`, '-f', `event_type=${event}`]);
+  } catch (e) {
+    // Unlike the guard lookups above, this one must fail loudly: a dispatch that
+    // does not land is exactly the "chain dies silently" failure the whole
+    // PIPELINE_PAT requirement exists to prevent. A 404 here usually means the
+    // token lacks `repo` scope rather than that the repo is missing.
+    console.error(
+      `::error::Failed to dispatch ${event} to ${repo}. The pipeline has stopped here. ` +
+        `Check that PIPELINE_PAT is set and has repo scope.\n${(e.stderr || e.message).toString().trim()}`,
+    );
+    process.exit(1);
+  }
   console.log(`Dispatched: ${event}`);
 };
 
@@ -142,6 +154,23 @@ if (stuck.length || pendingBlocked) {
     `No eligible story. Stuck: ${stuck.map((s) => `${s.id} (${s.status})`).join(', ') || 'none'}. ` +
       `Pending but dependency-blocked: ${pendingBlocked}. Needs a human — not dispatching.`,
   );
+  process.exit(0);
+}
+
+// production-prep is a hard stop awaiting a human: it opens a report PR and
+// dispatches nothing further. Re-running it while that PR is open re-does the
+// whole fan-out, re-appends its findings, and re-opens the report — an expensive
+// loop whose only brake would be the daily ceiling above.
+let openPrep = [];
+try {
+  openPrep = JSON.parse(
+    sh('gh', ['pr', 'list', '--repo', repo, '--state', 'open', '--head', 'chore/production-prep', '--json', 'number']),
+  );
+} catch (e) {
+  console.error(`Could not check for an open production-prep PR (${e.message}) — proceeding.`);
+}
+if (openPrep.length) {
+  console.log(`production-prep PR #${openPrep[0].number} is still open. It needs a human, not another run.`);
   process.exit(0);
 }
 

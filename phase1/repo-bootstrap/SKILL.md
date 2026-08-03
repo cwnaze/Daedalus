@@ -100,6 +100,9 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
       `REVIEWER_TOKEN` unset and let the `github-actions` bot approve, or set it to a
       second PAT. GitHub refuses to let the account that opened a PR approve it, so
       sharing one token here deadlocks the pipeline on story 1
+- [ ] `delete_branch_on_merge` is on —
+      `gh api -X PATCH repos/<owner>/<repo> -F delete_branch_on_merge=true`. Nothing in
+      the pipeline cleans up feature branches, and a 35-story project leaves 35 of them
 - [ ] Labels exist: `agent-fix`, `needs-human`, `steering`
 - [ ] The steering issue exists, labeled `steering`, pinned. Its body should say that
       commenting `pause` halts dispatch and `resume` restarts it
