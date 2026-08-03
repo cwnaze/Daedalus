@@ -223,6 +223,15 @@ while no workflow is running and `stories.json` has not moved in 90 minutes, the
 re-dispatches (`implement-story` already knows how to resume one) or escalates. It is
 not an orchestrator — it holds no state and makes no decisions the normal path doesn't.
 
+Exhausted quota is the one stall it must *not* treat as a stall. On a subscription
+token, running out looks identical from the outside — the run dies, no event follows —
+but re-dispatching spends quota that is already gone, once an hour, indefinitely. So
+both dispatch paths first check whether the last Claude-backed run failed on a rate
+limit and whether that window is still closed. CI cannot ask how much quota remains
+(`/usage` is an in-session slash command, not a CLI subcommand), so this reads the
+failure after the fact instead. Still stateless: each tick re-reads the same failed run,
+so the pipeline resumes on the first tick after the window opens.
+
 **Why dispatch goes through one script.** `dispatch-next.mjs` is the only thing that
 dispatches, so the pause switch, the stuck-story check, and the daily run ceiling cannot
 be bypassed by a caller that forgot them. The ceiling matters because `--max-turns`
