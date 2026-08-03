@@ -25,6 +25,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: node .github/scripts/complete-story.mjs
       - name: Dispatch next story
         env:

@@ -21,12 +21,20 @@ if (!story) throw new Error(`${storyId} not found in stories.json`);
 story.status = 'done';
 fs.writeFileSync('stories.json', JSON.stringify(db, null, 2) + '\n');
 
-const line = `${new Date().toISOString()} | ${storyId} | done | PR #${story.prNumber} merged after ${story.reviewRounds} review round(s)\n`;
+// Trust the event over the record: story.prNumber is whatever the last writer
+// put there, and if a PR was superseded the two disagree — which would close
+// the wrong issue and log a merge that did not happen.
+const mergedPr = process.env.PR_NUMBER || story.prNumber;
+if (story.prNumber && String(story.prNumber) !== String(mergedPr)) {
+  console.log(`::warning::stories.json records PR #${story.prNumber} but #${mergedPr} merged. Using the merged one.`);
+}
+
+const line = `${new Date().toISOString()} | ${storyId} | done | PR #${mergedPr} merged after ${story.reviewRounds} review round(s)\n`;
 fs.appendFileSync('docs/pipeline-log.md', line);
 
 if (story.issueNumber) {
   try {
-    sh('gh', ['issue', 'close', String(story.issueNumber), '--comment', `Resolved: PR #${story.prNumber} merged.`]);
+    sh('gh', ['issue', 'close', String(story.issueNumber), '--comment', `Resolved: PR #${mergedPr} merged.`]);
   } catch (e) {
     console.error(`Could not close issue #${story.issueNumber}:`, e.message);
   }
