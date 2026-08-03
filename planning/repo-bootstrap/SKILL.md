@@ -37,9 +37,17 @@ On any repo with existing history:
    them for the user to reconcile.
 3. `pipeline.json` comes from `codebase-inventory`, confirmed against a build you
    actually ran — not from the greenfield template.
-4. Check for workflow name collisions before copying `.github/workflows/`. An existing
-   `ci.yml` is the common case, and silently replacing a project's real CI is the worst
-   possible failure here.
+4. Check for **name collisions** before copying, in both directions:
+   - `.github/workflows/` — an existing `ci.yml` is the common case, and silently
+     replacing a project's real CI is the worst possible failure here.
+   - `.claude/skills/` — the pipeline installs `implement-story`, `pr-review`, `pr-fix`,
+     and `production-prep`. A project that already has a skill by one of those names
+     loses it, and the loss is quiet: the pipeline keeps working because *its* version is
+     the one now present.
+
+   On any collision, stop and ask. Do not rename either side on your own initiative — the
+   workflows invoke these skills by name (`prompt: /pr-review`), so renaming ours means
+   editing the workflow that calls it, and renaming theirs breaks whatever invoked it.
 5. Report the full list of files added, files merged, and files left alone, before the
    PR is opened.
 

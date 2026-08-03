@@ -54,6 +54,12 @@ git clone git@github.com:cwnaze/agentic-claude-workflow.git && cd agentic-claude
 
 Prerequisites: `claude`, `gh` (authenticated), `git`, `node`, `jq`.
 
+**Skill names.** None of the seven planning skills, and none of the four the pipeline
+installs into a project repo, share a name with a built-in Claude Code skill. Keep it
+that way when adding one: built-ins are bundled rather than stored in
+`~/.claude/skills`, so `install.sh` cannot detect a clash with them — it only sees skills
+that exist as files. Name choice is the only thing preventing a shadowed built-in.
+
 **`pipeline/` is not installed globally.** `repo-bootstrap` copies it into
 each project repo, so you can edit a project's pipeline without forking this one.
 
