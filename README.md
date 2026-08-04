@@ -70,6 +70,55 @@ Java, static sites and CLIs with no web surface are covered by examples in
 `pipeline/docs/pipeline-examples/`. Supporting a new language is one manifest plus
 one `if:` block, not a fork.
 
+## Required repo secrets
+
+Set these on the project repo before `repo-bootstrap` dispatches story 1 — it checks
+for them and stops if they're missing. Two kinds, set two different ways. Everything is
+a GitHub repo secret; `.env` is only ever local or rebuilt on the runner, and is never
+committed.
+
+**Pipeline secrets** run the pipeline itself. Set each one by hand — they do **not**
+belong in `.env`, and `sync-secrets.sh` will not pick them up.
+
+**`CLAUDE_CODE_OAUTH_TOKEN`** — runs Claude Code in Actions, billed to your subscription.
+Get it: run `claude setup-token`, then
+`gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>` with the printed token.
+
+**`PIPELINE_PAT`** — lets one workflow trigger the next; `GITHUB_TOKEN` can't.
+Get it: GitHub → **Settings → Developer settings → Personal access tokens → Tokens
+(classic)** → Generate new token → check `repo` and `workflow` → Generate. Then
+`gh secret set PIPELINE_PAT --repo <owner>/<repo>`.
+
+**`PIPELINE_WEBHOOK`** *(optional)* — where `notify` posts when something needs a human.
+Get it: a Slack incoming webhook URL, a Discord channel webhook URL, or an ntfy topic
+(`https://ntfy.sh/<topic>`, no signup needed). Then
+`gh secret set PIPELINE_WEBHOOK --repo <owner>/<repo>`.
+
+**`REVIEWER_TOKEN`** *(optional)* — approves PRs from an identity other than
+`PIPELINE_PAT`, since GitHub won't let an account approve its own PR.
+Get it: same steps as `PIPELINE_PAT`, but from a **different** GitHub account with repo
+access. Then `gh secret set REVIEWER_TOKEN --repo <owner>/<repo>`.
+
+**App secrets** are whatever the project itself needs — database URL, third-party keys.
+Those go through `.env`, once `project-docs` has written `.env.example`:
+
+```bash
+cp .env.example .env    # fill in real values
+./scripts/sync-secrets.sh
+```
+
+`.env.example` is the allowlist in both directions: `sync-secrets.sh` pushes up only the
+keys listed there, and `write-env.mjs` rebuilds `.env` from those same keys on each
+runner. So a variable the app needs but `.env.example` omits is invisible to CI —
+`write-env.mjs` warns rather than fails, and it surfaces later as a feature that looks
+broken to `pr-review`. Empty values are skipped with a `skip <KEY>` line, not an error;
+read the sync output rather than trusting its exit code.
+
+Auto-merge must also be enabled on the repo (`allow_auto_merge`), with `ci` required on
+`main`. `implement-story` arms `gh pr merge --auto`
+on every PR and that is the only thing that merges anything; `repo-bootstrap` checks
+both before dispatching story 1.
+
 ## Run
 
 Two entry points. Both converge on the same last three steps, and both end with the
@@ -127,12 +176,7 @@ worst thing it could do.
 
 ### Both tracks
 
-`project-docs` writes `.env.example` from the infrastructure doc. `repo-bootstrap` then
-stops and waits: copy it to `.env`, fill in the values, and it runs
-`scripts/sync-secrets.sh` to push them to repo secrets. CI rebuilds `.env` on each
-runner from those secrets. `.env` is never committed.
-
-Then it runs itself:
+`repo-bootstrap` stops and waits for the secrets described above, then runs itself:
 
 ```
 story-start → PR (auto-merge armed) → pr-review → issue → pr-fix ─┐
@@ -144,46 +188,6 @@ story-start → PR (auto-merge armed) → pr-review → issue → pr-fix ─┐
 
 pipeline-watchdog (hourly) ──→ resumes or escalates a stalled run
 ```
-
-## Required repo secrets
-
-Two kinds, set two different ways. Everything is a GitHub repo secret; `.env` is only
-ever local or rebuilt on the runner, and is never committed.
-
-**Pipeline secrets** run the pipeline itself. Set each one by hand — they do **not**
-belong in `.env`, and `sync-secrets.sh` will not pick them up:
-
-```bash
-gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>   # `claude setup-token` output
-gh secret set PIPELINE_PAT --repo <owner>/<repo>
-```
-
-| Secret | Why |
-|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code in Actions. Generate with `claude setup-token` against a Pro or Max subscription — no API key or API billing needed. Draws on your subscription quota, which is why `pipeline-watchdog` backs off when it is exhausted. |
-| `PIPELINE_PAT` | PAT or App token, `repo` + `workflow`. **Without it the chain dies silently after story 1** — a workflow's own `GITHUB_TOKEN` cannot trigger another workflow. |
-| `PIPELINE_WEBHOOK` | Optional. Slack/Discord/ntfy URL; `notify` posts there when anything gets labeled `needs-human`. Unset, the job no-ops. |
-| `REVIEWER_TOKEN` | Optional but **must not be `PIPELINE_PAT`**. The identity that approves PRs. GitHub refuses to let the account that opened a PR approve it, so the reviewer has to be someone else; unset, the `github-actions` bot approves instead. |
-
-**App secrets** are whatever the project itself needs — database URL, third-party keys.
-Those go through `.env`:
-
-```bash
-cp .env.example .env    # fill in real values
-./scripts/sync-secrets.sh
-```
-
-`.env.example` is the allowlist in both directions: `sync-secrets.sh` pushes up only the
-keys listed there, and `write-env.mjs` rebuilds `.env` from those same keys on each
-runner. So a variable the app needs but `.env.example` omits is invisible to CI —
-`write-env.mjs` warns rather than fails, and it surfaces later as a feature that looks
-broken to `pr-review`. Empty values are skipped with a `skip <KEY>` line, not an error;
-read the sync output rather than trusting its exit code.
-
-Auto-merge must also be enabled on the repo (`allow_auto_merge`), with `ci` required on
-`main`. `implement-story` arms `gh pr merge --auto`
-on every PR and that is the only thing that merges anything; `repo-bootstrap` checks
-both before dispatching story 1.
 
 ## Controlling it from a phone
 
@@ -223,96 +227,74 @@ pipeline/                    # copied into the project repo; runs itself
 
 ## Design notes
 
-**Why not an orchestrator.** Every pipeline transition is already a native GitHub event
-and the only durable state is `stories.json` in the repo. An external orchestrator would
-add a hop, an uptime requirement, and a second copy of state. Planning is local because
-it needs a conversation and the Obsidian vault; everything after `git push` is not.
+**Why not an orchestrator?** Every transition is already a native GitHub event, and the
+only durable state is `stories.json`. An orchestrator would add a hop, an uptime
+requirement, and a second copy of state — planning stays local because it needs a
+conversation, but everything after `git push` doesn't.
 
-**Why demos are generated, not written.** A markdown demo doc is a point-in-time claim
-that cannot fail. A spec that generates one can. `pr-review` re-runs every done story's
-spec, so all demos are re-verified on every PR and stale screenshots become a visual
-regression signal.
+**Why are demos generated, not written?** A markdown demo doc is a point-in-time claim
+that can't fail. A spec that generates one can — `pr-review` re-runs every done story's
+spec, so stale screenshots become a visible regression signal.
 
-**Why the review is one agent, not a fan-out.** On a single-story diff a fan-out costs
-several times more and yields overlapping findings the fix agent must then reconcile.
-`production-prep` *is* a fan-out, because it is whole-repo and its passes are genuinely
+**Why is the review one agent, not a fan-out?** On a single-story diff, a fan-out costs
+more and produces overlapping findings the fix agent then has to reconcile.
+`production-prep` is a fan-out because it's whole-repo and its passes are genuinely
 independent.
 
-**Why there is a watchdog, given there is no orchestrator.** Event-driven means an
-event that never fires is indistinguishable from nothing to do. A runner eviction, an
-API 5xx, or a job timeout leaves a story non-terminal with no further event coming, and
-the pipeline stops mid-story, silently, forever. `pipeline-watchdog` is the one
-time-triggered thing in the repo: hourly, it looks for a story that is non-terminal
-while no workflow is running and `stories.json` has not moved in 90 minutes, then
-re-dispatches (`implement-story` already knows how to resume one) or escalates. It is
-not an orchestrator — it holds no state and makes no decisions the normal path doesn't.
+**Why a watchdog, given there's no orchestrator?** Event-driven means a runner eviction,
+API 5xx, or timeout can leave a story stuck with no further event coming.
+`pipeline-watchdog` runs hourly, looking for a story that's non-terminal with nothing
+running and `stories.json` untouched for 90 minutes, then re-dispatches or escalates.
 
-Exhausted quota is the one stall it must *not* treat as a stall. On a subscription
-token, running out looks identical from the outside — the run dies, no event follows —
-but re-dispatching spends quota that is already gone, once an hour, indefinitely. So
-both dispatch paths first check whether the last Claude-backed run failed on a rate
-limit and whether that window is still closed. CI cannot ask how much quota remains
-(`/usage` is an in-session slash command, not a CLI subcommand), so this reads the
-failure after the fact instead. Still stateless: each tick re-reads the same failed run,
-so the pipeline resumes on the first tick after the window opens.
+**Why doesn't the watchdog treat exhausted quota as a stall?** On a subscription token,
+running out looks identical to a stall from the outside, but re-dispatching would just
+burn quota that's already gone, once an hour, forever. So it checks whether the last run
+failed on a rate limit and whether that window is still closed before acting.
 
-**Why dispatch goes through one script.** `dispatch-next.mjs` is the only thing that
-dispatches, so the pause switch, the stuck-story check, and the daily run ceiling cannot
-be bypassed by a caller that forgot them. The ceiling matters because `--max-turns`
-bounds a single run and nothing bounded the total: a review/fix cycle that never
-converges, or a watchdog retrying something permanently broken, otherwise bills all the
-way down with no alert.
+**Why does dispatch go through one script?** `dispatch-next.mjs` is the only thing that
+dispatches, so the pause switch, the stuck-story check, and the daily run ceiling can't
+be bypassed. The ceiling exists because `--max-turns` bounds a single run but nothing
+bounds the total — a cycle that never converges would otherwise bill indefinitely with
+no alert.
 
-**Why review approval comes from the workflow, not the agent.** `pr-review` runs as
-`PIPELINE_PAT` because the findings issue it opens has to trigger `pr-fix`, and an issue
-opened by `GITHUB_TOKEN` triggers nothing. But that is also the identity that opened the
-PR, and GitHub will not let an account approve its own. So the agent writes a verdict
-file and the workflow applies it under a different token. The split is not ceremony: with
-one token the pipeline deadlocks on story 1, and the failure looks like a PR that simply
-never merges.
+**Why does review approval come from the workflow, not the agent?** `pr-review` runs as
+`PIPELINE_PAT` so its findings issue can trigger `pr-fix`, but that's the same identity
+that opened the PR, and GitHub won't let an account approve its own PR. So the agent
+writes a verdict file and the workflow applies it under a different token.
 
-**Why `ci` exists separately from `pr-review`.** `pr-review` is an agent judging another
-agent's work; `ci` is a deterministic check that does not negotiate. It also gives branch
-protection something to require — with an empty required-checks list, the auto-merge
-armed at PR-open fires before any review has started.
+**Why does `ci` exist separately from `pr-review`?** `pr-review` is an agent judging
+another agent's work; `ci` is a deterministic check that doesn't negotiate. It also gives
+branch protection something to require — without it, auto-merge would fire before any
+review starts.
 
-**Trust boundary.** Agents here hold a token with `repo` and `workflow` scope and read
-the steering issue, PR comments, and the diff. Only `OWNER`/`MEMBER`/`COLLABORATOR`
-authors are treated as instruction; everything else is data. On a public repo the
-unfiltered version means a stranger's comment is a prompt to a privileged agent.
+**What's the trust boundary?** Agents hold a token with `repo` and `workflow` scope and
+read the steering issue, PR comments, and the diff. Only `OWNER`/`MEMBER`/`COLLABORATOR`
+authors are treated as instruction — everything else is data, since on a public repo a
+stranger's comment would otherwise be a prompt to a privileged agent.
 
-**Why the toolchain is data, not workflow code.** The stack appeared in seven places —
-the agent workflows, the Playwright config, and the CI job — so supporting Python meant seven
-edits and seven chances to disagree. `pipeline.json` states it once and everything reads
-it. The two runtimes stay separate on purpose: the project's runtime is whatever the app
-is written in, while the pipeline's is always Node, because its scripts and the demo
-harness are. Playwright drives the app over HTTP and does not care what answers, so a Go
-service gets browser demos without Node ever entering its `go.mod`.
+**Why is the toolchain data, not workflow code?** The stack used to appear in seven
+places — the agent workflows, the Playwright config, the CI job — so supporting a new
+language meant seven edits. `pipeline.json` states it once and everything reads it; the
+pipeline's own runtime stays Node regardless, since its scripts and demo harness are Node.
 
-**Why "Continuing an Existing Project" is a separate entry, not a flag.** The two tracks ask opposite
-questions. Greenfield intake asks what to build; on an existing codebase that is already
-decided and the load-bearing questions are what must *not* change and how anyone would
-know if it did. Detection is dynamic — `detect-stack.mjs` reads whatever marker files the
-repo has and reports what it could not determine rather than guessing, because a wrong
-build command fails every CI run identically and is tedious to trace back.
+**Why is "Continuing an Existing Project" a separate entry, not a flag?** The two tracks
+ask opposite questions — greenfield asks what to build, brownfield asks what must not
+change. Detection is dynamic: `detect-stack.mjs` reports what it couldn't determine
+rather than guessing.
 
-**Why characterization specs come first.** The pipeline's safety rests on the regression
-suite: `pr-review` re-runs every done story's specs, so story 20 cannot silently break
-story 3. A brownfield project starts with no such suite over code that already has users.
-So Pass 0 writes specs that pin current behaviour — including behaviour that is wrong,
-pinned deliberately — and `dependsOn` forbids a refactor story from starting until the
-characterization covering its area is done. Without that ordering the pipeline refactors
-code it cannot prove it did not break.
+**Why do characterization specs come first?** The pipeline's safety rests on `pr-review`
+re-running every done story's specs, and a brownfield project starts with no such suite.
+So Pass 0 pins current behavior first — including behavior that's wrong, deliberately —
+and no refactor story can start until the characterization covering its area is done.
 
-**Why the loop terminates at 3 rounds.** Review → fix → review will cycle indefinitely
-on anything the reviewer is subtly wrong about. Round 3 hard-stops to `needs-human`.
+**Why does the loop terminate at 3 rounds?** Review → fix → review can cycle indefinitely
+on something the reviewer is subtly wrong about, so round 3 hard-stops to `needs-human`.
 
-**Local services are optional.** The workflows run `docker compose up --wait` only if the
-project has a compose file. Hosted-SaaS projects — Turso, Resend, R2 and friends — need
-nothing there; CI reaches them with the same credentials you put in `.env`.
+**Are local services required?** No — workflows run `docker compose up --wait` only if
+the project has a compose file. Hosted-SaaS projects need nothing there; CI reaches them
+with the same credentials you put in `.env`.
 
-**Known costs.** Real third-party credentials live in repo secrets, which means CI runs
-against live services unless the project provides local substitutes. Screenshot-heavy
-specs are slower and flakier than assertions;
-the determinism rules in `playwright.config.ts` and `implement-story` exist to contain
-that, and they are not optional.
+**What are the known costs?** Real third-party credentials live in repo secrets, so CI
+runs against live services unless the project provides local substitutes.
+Screenshot-heavy specs are also slower and flakier than assertions, which is why
+`playwright.config.ts` and `implement-story` enforce determinism rules.
