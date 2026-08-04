@@ -80,24 +80,12 @@ committed.
 **Pipeline secrets** run the pipeline itself. Set each one by hand — they do **not**
 belong in `.env`, and `sync-secrets.sh` will not pick them up.
 
-**`CLAUDE_CODE_OAUTH_TOKEN`** — runs Claude Code in Actions, billed to your subscription.
-Get it: run `claude setup-token`, then
-`gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>` with the printed token.
-
-**`PIPELINE_PAT`** — lets one workflow trigger the next; `GITHUB_TOKEN` can't.
-Get it: GitHub → **Settings → Developer settings → Personal access tokens → Tokens
-(classic)** → Generate new token → check `repo` and `workflow` → Generate. Then
-`gh secret set PIPELINE_PAT --repo <owner>/<repo>`.
-
-**`PIPELINE_WEBHOOK`** *(optional)* — where `notify` posts when something needs a human.
-Get it: a Slack incoming webhook URL, a Discord channel webhook URL, or an ntfy topic
-(`https://ntfy.sh/<topic>`, no signup needed). Then
-`gh secret set PIPELINE_WEBHOOK --repo <owner>/<repo>`.
-
-**`REVIEWER_TOKEN`** *(optional)* — approves PRs from an identity other than
-`PIPELINE_PAT`, since GitHub won't let an account approve its own PR.
-Get it: same steps as `PIPELINE_PAT`, but from a **different** GitHub account with repo
-access. Then `gh secret set REVIEWER_TOKEN --repo <owner>/<repo>`.
+| Secret | Why | Get it |
+|---|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | Runs Claude Code in Actions, billed to your subscription. | Run `claude setup-token`, then `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>` with the printed token. |
+| `PIPELINE_PAT` | Lets one workflow trigger the next; `GITHUB_TOKEN` can't. | GitHub → **Settings → Developer settings → Personal access tokens → Tokens (classic)** → Generate new token → check `repo` and `workflow` → Generate. Then `gh secret set PIPELINE_PAT --repo <owner>/<repo>`. |
+| `PIPELINE_WEBHOOK` *(optional)* | Where `notify` posts when something needs a human. | A Slack incoming webhook URL, a Discord channel webhook URL, or an ntfy topic (`https://ntfy.sh/<topic>`, no signup needed). Then `gh secret set PIPELINE_WEBHOOK --repo <owner>/<repo>`. |
+| `REVIEWER_TOKEN` *(optional)* | Approves PRs from an identity other than `PIPELINE_PAT`, since GitHub won't let an account approve its own PR. | Same steps as `PIPELINE_PAT`, but from a **different** GitHub account with repo access. Then `gh secret set REVIEWER_TOKEN --repo <owner>/<repo>`. |
 
 **App secrets** are whatever the project itself needs — database URL, third-party keys.
 Those go through `.env`, once `project-docs` has written `.env.example`:
