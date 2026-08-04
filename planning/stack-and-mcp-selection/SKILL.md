@@ -29,11 +29,17 @@ Read `references/mcp-map.md` and match every stack element. The governing questi
 - The API changed shape rather than just growing (Svelte 5 runes vs. Svelte 4 stores; Tailwind v4 config-in-CSS vs. v3 JS config)
 - The service's dashboard/CLI surface changes frequently
 
-For anything matching, request the MCP server. For anything you suspect but that is not in the map, **web search the library's current major version before deciding** — do not rely on memory for what is current, since that is the exact failure the MCP servers exist to prevent.
+For anything matching, request the MCP server — **unless an official CLI already covers it.** Check first: for platform/infra services (Cloudflare, Supabase, Turso, Vercel, GitHub), an official CLI (`wrangler`, `supabase`, `turso`, `vercel`, `gh`) is usually the vendor's best-maintained integration path. It already runs through Bash, doesn't require embedding an access token in a committed `.mcp.json`, and is typically more reliable than a third-party or wrapper MCP server for the same actions. Prefer the CLI in that case and mark the map entry `(none — use <cli> CLI)`. Reach for the MCP server only when the CLI genuinely can't do something the agent needs (live interactive introspection, browser automation) — not just "it also exists."
+
+This preference does **not** apply to pure documentation/API-shape servers (Svelte, Tailwind, TipTap, Next.js) — there's no CLI that fixes stale training-data knowledge of a library's current API surface, so the staleness problem stands regardless of CLI availability.
+
+For anything you suspect but that is not in the map, **web search the library's current major version before deciding** — do not rely on memory for what is current, since that is the exact failure the MCP servers exist to prevent.
 
 ### 4. Confirm and record
 
-Show the user the stack, the MCP list with a one-line reason each, and anything you flagged as version-risky but for which no server exists (those become CLAUDE.md warnings instead).
+Show the user the stack, the MCP list with a one-line reason each, the CLI tools preferred over an MCP server with their auth method, and anything you flagged as version-risky but for which no server exists (those become CLAUDE.md warnings instead).
+
+For every CLI or MCP server that needs authentication, list what credential is required and how it's obtained (interactive `login` command vs. a token/key the user must supply) — then prompt the user for exactly those credentials before moving on. Don't guess at scopes or ask for more than the stack in front of you needs.
 
 Append any new mapping you discovered to `references/mcp-map.md`. This file is the part of the pipeline that gets smarter over time; leaving it unmaintained is the main way this skill decays.
 
@@ -54,7 +60,7 @@ and a wrong command fails every CI run until someone notices.
 If the project has no web surface, omit `serve` entirely and tell `story-breakdown` that
 every story is `demoKind: "command"`.
 
-**`.mcp.json`** staged at `/tmp/<project-slug>/mcp.json` for `repo-bootstrap` to commit:
+**`.mcp.json`** staged at `/tmp/<project-slug>/mcp.json` for `repo-bootstrap` to commit — only the servers that survived the CLI-preference check in step 3:
 
 ```json
 {
@@ -63,5 +69,10 @@ every story is `demoKind: "command"`.
   }
 }
 ```
+
+CLI tools preferred over an MCP server (per `references/mcp-map.md`) don't go in
+`.mcp.json` — they're plain CLIs invoked over Bash. List them and their auth method in
+the stack doc instead, so `repo-bootstrap` knows what login steps a human needs to run
+and what secrets CI needs.
 
 Next step: `/project-docs`.
