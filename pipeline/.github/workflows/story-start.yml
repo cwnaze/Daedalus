@@ -44,4 +44,8 @@ jobs:
           # every one of those calls is silently denied and the job "succeeds" having
           # done nothing (found bootstrapping Alvus-AI's US-001: 11 permission
           # denials, 0 output -- 21 turns and not one file touched).
-          claude_args: --max-turns 120 --allowedTools "Bash,Edit,Write,Glob,Grep"
+          # 200, not 120: a full story is implement + demo spec + local verification,
+          # and 120 ran out mid-story on a real run. Exhausting turns burns the whole
+          # run and forces a resume that re-reads all the same context, which costs
+          # more than the extra turns would have. The job timeout is the real ceiling.
+          claude_args: --max-turns 200 --allowedTools "Bash,Edit,Write,Glob,Grep"
