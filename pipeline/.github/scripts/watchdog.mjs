@@ -67,7 +67,29 @@ function rateLimitedUntil() {
     return null;
   }
 
-  if (!/usage limit reached|rate[ _-]?limit|quota exceeded|429/i.test(log)) return null;
+  // Deaths that are definitively not quota. Checked first because a long log will
+  // otherwise offer some incidental digits to match against.
+  if (/error_max_turns|Reached maximum number of turns/i.test(log)) {
+    console.log(`Run ${last.id} died on turn exhaustion, not quota.`);
+    return null;
+  }
+
+  // Each pattern must be specific enough to survive a 300-line log of timestamps, SHAs
+  // and byte counts. A bare /429/ is not: in Alvus-AI it matched `12:28:51.5255429Z` on
+  // a max-turns failure and reported a five-hour quota outage that was never happening,
+  // which suppressed every dispatch this script exists to make. Anchor numbers to the
+  // words around them, and prefer the provider's own error identifiers.
+  const quotaSignals = [
+    /usage limit reached/i,
+    /quota exceeded/i,
+    /rate_limit_error/i,
+    /rate limit exceeded/i,
+    /\b429\s+too many requests/i,
+    /\b(?:status|statuscode|http)\b[^\n]{0,16}\b429\b/i,
+  ];
+  const hit = quotaSignals.find((re) => re.test(log));
+  if (!hit) return null;
+  console.log(`Quota signal matched: ${hit}`);
 
   // Claude reports its own reset time when it knows it ("limit will reset at 3pm",
   // or an epoch). Prefer that over guessing at the window length.
