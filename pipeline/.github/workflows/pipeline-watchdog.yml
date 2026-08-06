@@ -10,7 +10,11 @@ name: pipeline-watchdog
 # pipeline is healthy, paused, or finished.
 on:
   schedule:
-    - cron: '0 * * * *'
+    # Not :00 -- GitHub's own docs warn the schedule trigger is delayed most at
+    # the top of every hour, since every scheduled workflow on GitHub competes
+    # for that same minute. An off-hour offset doesn't guarantee punctuality
+    # (nothing does for `schedule`), but it avoids the worst of the congestion.
+    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
