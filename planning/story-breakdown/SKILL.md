@@ -55,7 +55,25 @@ Each story must be:
 - **Independently demoable.** If you cannot describe a screenshot sequence or a command
   output that proves it works, it is not a story yet — either split it or fold it into
   a neighbour.
-- **Sized to one PR.** If the acceptance criteria exceed roughly six items, split.
+- **Sized to one PR, one sitting.** Acceptance-criteria count is a weak proxy for
+  size — split by **concern**, not by counting items. Each new piece of tooling or
+  infrastructure a story introduces (a new external service to provision, a new
+  ORM/migration pipeline, a new seed/fixture pass, a new integration wired into app
+  routes) is its own story unless it is trivially small, even if the total acceptance
+  criteria stay under six. Rule of thumb: if doing it by hand would mean touching more
+  than one unrelated tool/CLI/config surface in the same sitting, split it. Still use
+  six-plus acceptance criteria as a secondary trigger to double-check a story that
+  passes the concern test but has grown long anyway.
+
+  Worked example — a real story that shipped as one 5-AC item ("Provision Supabase
+  (Postgres + Storage) and connect Drizzle": local stack + Storage bucket + Drizzle
+  schema/migrations + `tier_limits` seed data + a DB-backed health check + fixture
+  seeding) burned an implementing agent's full turn budget twice without finishing,
+  despite being under the old six-item threshold. It bundled four separate concerns —
+  provisioning, schema/migrations, seed data, and health-check wiring — that should
+  have been three stories: (1) provision Supabase + Storage, connect Drizzle to a
+  migrated baseline schema; (2) seed `tier_limits` and fixture users for dev/CI;
+  (3) wire `GET /api/health` to prove live DB connectivity.
 - **Dependency-explicit.** `dependsOn` carries ordering. Do not encode ordering in
   priority integers; a flat line cannot express two stories that could proceed in
   parallel, which matters for split frontend/backend repos.
