@@ -8,7 +8,7 @@ import fs from 'node:fs';
 
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
 
-const storyId = (process.env.PR_BODY ?? '').match(/Story:\s*(US-[A-Z]\d+)/)?.[1];
+const storyId = (process.env.PR_BODY ?? '').match(/Story:\s*(US-[A-Z0-9]+)/)?.[1];
 if (!storyId) {
   console.error('No "Story: US-XXX" line in the PR body — not a pipeline PR, nothing to do.');
   process.exit(0);
