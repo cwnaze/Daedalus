@@ -81,7 +81,19 @@ PR: #<prNumber>
 - [ ] **[convention]** ...
 ```
 
-Label `agent-fix`. Increment `reviewRounds`.
+Label `agent-fix` — `pr-fix` triggers on that label alone, so an issue opened without it
+fires nothing and the round is lost silently.
+
+Then **write the bookkeeping back to `stories.json` and commit it to main**, in one
+commit with a `docs/pipeline-log.md` line like every other transition:
+
+- `issueNumber` — the issue you just created. `complete-story` closes this on merge; if
+  it stays `null` the findings issue outlives the merged PR.
+- `reviewRounds` — incremented. Step 7's round budget reads this, so leaving it at `0`
+  means the 3-round hard stop never trips and a broken story loops indefinitely.
+
+Creating the issue is not the same as recording it. Do not skip this because the issue
+is visible on GitHub — nothing downstream reads GitHub for it.
 
 ### 7. Terminate or approve
 

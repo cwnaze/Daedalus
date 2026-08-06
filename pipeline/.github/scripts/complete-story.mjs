@@ -32,11 +32,30 @@ if (story.prNumber && String(story.prNumber) !== String(mergedPr)) {
 const line = `${new Date().toISOString()} | ${storyId} | done | PR #${mergedPr} merged after ${story.reviewRounds} review round(s)\n`;
 fs.appendFileSync('docs/pipeline-log.md', line);
 
-if (story.issueNumber) {
+// story.issueNumber is written by pr-review, which is an agent following a skill — so
+// treat it as a hint, not a guarantee. When it is missing, fall back to the issue body,
+// which pr-review is templated to open with a literal `PR: #<n>` line. Without this
+// fallback a single skipped bookkeeping step leaks an open findings issue per story,
+// silently, with the merge otherwise looking clean.
+const toClose = new Set();
+if (story.issueNumber) toClose.add(Number(story.issueNumber));
+try {
+  const open = JSON.parse(
+    sh('gh', ['issue', 'list', '--state', 'open', '--limit', '100', '--json', 'number,body']),
+  );
+  for (const i of open) {
+    if (new RegExp(`^PR:\\s*#${mergedPr}\\s*$`, 'm').test(i.body ?? '')) toClose.add(i.number);
+  }
+} catch (e) {
+  console.error(`Could not list open issues: ${e.message}`);
+}
+
+for (const n of toClose) {
   try {
-    sh('gh', ['issue', 'close', String(story.issueNumber), '--comment', `Resolved: PR #${mergedPr} merged.`]);
+    sh('gh', ['issue', 'close', String(n), '--comment', `Resolved: PR #${mergedPr} merged.`]);
+    console.log(`Closed findings issue #${n}.`);
   } catch (e) {
-    console.error(`Could not close issue #${story.issueNumber}:`, e.message);
+    console.error(`Could not close issue #${n}:`, e.message);
   }
 }
 
