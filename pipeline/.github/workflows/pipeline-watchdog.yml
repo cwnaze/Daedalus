@@ -14,7 +14,15 @@ on:
     # the top of every hour, since every scheduled workflow on GitHub competes
     # for that same minute. An off-hour offset doesn't guarantee punctuality
     # (nothing does for `schedule`), but it avoids the worst of the congestion.
-    - cron: '23 * * * *'
+    #
+    # Four ticks an hour, not one, because `schedule` does not merely run late --
+    # it silently drops firings. Over one observed day an hourly cron produced 9
+    # runs out of 24, with a 7-hour hole between them. STALL_MINUTES is 90, so an
+    # hourly tick could not meet its own deadline: the detector was offline
+    # longer than the condition it detects. Ticks are near-free (the script exits
+    # in seconds whenever a pipeline run is pending or nothing is in flight), so
+    # buy the reliability back with redundancy.
+    - cron: '8,23,38,53 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -22,8 +30,15 @@ on:
         type: boolean
         default: true
 
+# Deliberately NOT the story-pipeline group the emitters share. Only one run per
+# group may sit pending, and a newer arrival cancels the older pending one — so a
+# watchdog tick queued behind story-start was evicted by the next pr-review, and
+# the watchdog went dark exactly when the pipeline was busiest, which is exactly
+# when a stall is most likely. It does not need the group: the script already
+# refuses to act while any pipeline run is non-completed ("Active runs: ... Not
+# stalled"), so mutual exclusion comes from that check, not from the queue.
 concurrency:
-  group: story-pipeline
+  group: pipeline-watchdog
   cancel-in-progress: false
 
 permissions:

@@ -35,7 +35,7 @@ const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
  * instead. That turns out to be the better signal anyway: it reports what actually
  * happened rather than what a prediction says should have.
  *
- * Self-correcting by construction. Nothing is recorded; each hourly tick re-reads the
+ * Self-correcting by construction. Nothing is recorded; each tick re-reads the
  * same failed run and re-evaluates the deadline, so the pipeline resumes on the first
  * tick after the window opens and stays quiet until then.
  *
@@ -115,7 +115,7 @@ function quotaBlocked() {
   const mins = Math.round((until - Date.now()) / 60000);
   console.log(
     `Claude quota exhausted; expected back at ${until.toISOString()} (~${mins}m). ` +
-      `Not dispatching — the next hourly tick will re-check.`,
+      `Not dispatching — the next tick will re-check.`,
   );
   return true;
 }
@@ -213,7 +213,7 @@ console.log(
 // event on the success path, so once one dies the chain is provably over. Waiting out
 // STALL_MINUTES from there is dead time — and worse, the clock is anchored to the last
 // *transition*, so a run that fails moments after committing one buys itself a nearly
-// full window plus up to an hour of cron slack.
+// full window plus up to a tick of cron slack.
 //
 // Only the workflows that emit pipeline events count (`emitters`, above). `ci` failing is
 // a red build, which pr-review is supposed to see and act on; that is the pipeline
