@@ -109,13 +109,21 @@ if (!active.length) {
   process.exit(spawnDispatch());
 }
 
-// A pipeline workflow still running means the story is progressing, not stalled.
-const runs = JSON.parse(
-  sh('gh', ['api', `repos/${repo}/actions/runs?status=in_progress&per_page=100`]),
+// One listing serves both checks below. No `status=` filter: that parameter takes a
+// single value, and `status=in_progress` silently omits `queued`, `waiting`, and
+// `requested` — a dispatch sitting in the queue would read as "nothing running" and
+// earn itself a second, duplicate dispatch.
+const allRuns = JSON.parse(
+  sh('gh', ['api', `repos/${repo}/actions/runs?per_page=100`]),
 ).workflow_runs.filter((r) => r.name !== 'pipeline-watchdog');
 
-if (runs.length) {
-  console.log(`Active runs: ${runs.map((r) => r.name).join(', ')}. Not stalled.`);
+// A pipeline workflow still running means the story is progressing, not stalled.
+const pending = allRuns.filter((r) => r.status !== 'completed');
+
+if (pending.length) {
+  console.log(
+    `Active runs: ${pending.map((r) => `${r.name}(${r.status})`).join(', ')}. Not stalled.`,
+  );
   process.exit(0);
 }
 
@@ -124,13 +132,45 @@ if (runs.length) {
 const lastTouch = new Date(sh('git', ['log', '-1', '--format=%cI', '--', 'stories.json']));
 const idleMinutes = Math.round((Date.now() - lastTouch.getTime()) / 60000);
 
-if (idleMinutes < stallMinutes) {
+// Elapsed time is a guess about whether anything is still coming. A completed run that
+// did not succeed is not a guess: these workflows only ever produce their successor's
+// event on the success path, so once one dies the chain is provably over. Waiting out
+// STALL_MINUTES from there is dead time — and worse, the clock is anchored to the last
+// *transition*, so a run that fails moments after committing one buys itself a nearly
+// full window plus up to an hour of cron slack.
+//
+// Only the workflows that emit pipeline events count. `ci` failing is a red build, which
+// pr-review is supposed to see and act on; that is the pipeline working, not stalling.
+const emitters = ['story-start', 'pr-review', 'pr-fix', 'story-complete', 'production-prep'];
+// `skipped`/`neutral`/`action_required` are not deaths: an `if:` that evaluated false or
+// a job awaiting approval. Only conclusions that mean "this run will never emit".
+const dead = ['failure', 'timed_out', 'startup_failure', 'cancelled'];
+const failedSinceTouch = allRuns.filter(
+  (r) =>
+    emitters.includes(r.name) &&
+    dead.includes(r.conclusion) &&
+    new Date(r.updated_at) > lastTouch,
+);
+
+// Consecutive because lastTouch only advances on a real transition: a resumed run that
+// dies again writes no state, so its failure joins the same batch. Any genuine progress
+// moves lastTouch and empties this list, which is the reset.
+const MAX_RETRIES = 3;
+const exhausted = failedSinceTouch.length >= MAX_RETRIES;
+
+const stalled = failedSinceTouch.length > 0 || idleMinutes >= stallMinutes;
+
+if (!stalled) {
   console.log(`Last transition ${idleMinutes}m ago (threshold ${stallMinutes}m). Not stalled.`);
   process.exit(0);
 }
 
 const story = active[0];
-console.log(`STALLED: ${story.id} is ${story.status}, idle ${idleMinutes}m, no runs active.`);
+const cause = failedSinceTouch.length
+  ? `${failedSinceTouch.length} failed run(s) since the last transition ` +
+    `(${failedSinceTouch.map((r) => `${r.name}#${r.run_number} ${r.conclusion}`).join(', ')})`
+  : `idle ${idleMinutes}m, no runs active`;
+console.log(`STALLED: ${story.id} is ${story.status}, ${cause}.`);
 
 if (dryRun) {
   console.log('[dry run] stopping here.');
@@ -139,22 +179,26 @@ if (dryRun) {
 
 if (quotaBlocked()) process.exit(0);
 
-if (story.status === 'in_progress') {
+if (story.status === 'in_progress' && !exhausted) {
   // implement-story has crash-resume logic for exactly this: it finds the
   // non-terminal story, reconciles it against any open PR, and continues.
   // Nothing invoked that logic until this workflow existed.
   sh('gh', ['api', `repos/${repo}/dispatches`, '-f', 'event_type=story-start']);
-  console.log(`Re-dispatched story-start to resume ${story.id}.`);
+  console.log(`Re-dispatched story-start to resume ${story.id} (attempt ${failedSinceTouch.length + 1}).`);
   process.exit(0);
 }
 
-// in_review / fixing means a PR exists. Re-running review is not ours to guess
-// at — pushing a commit or reopening the PR would fabricate history — so
-// escalate rather than act.
-const note =
-  `Pipeline watchdog: **${story.id}** has been \`${story.status}\` for ${idleMinutes} minutes ` +
-  `with no workflow running.\n\nPR #${story.prNumber ?? '?'} likely needs its review re-run — ` +
-  `push an empty commit to the branch to re-trigger \`pr-review\`, or close and reopen the PR.`;
+// Either the retry budget is gone, or this is in_review/fixing — where a PR exists and
+// re-running review is not ours to guess at, since pushing a commit or reopening the PR
+// would fabricate history. Escalate rather than act.
+const note = exhausted
+  ? `Pipeline watchdog: **${story.id}** is \`${story.status}\` and has burned all ` +
+    `${MAX_RETRIES} retries without making a transition.\n\nFailed runs:\n` +
+    failedSinceTouch.map((r) => `- ${r.name} #${r.run_number} — ${r.conclusion} — ${r.html_url}`).join('\n') +
+    `\n\nNot re-dispatching: three identical failures are a bug to fix, not a run to retry.`
+  : `Pipeline watchdog: **${story.id}** has been \`${story.status}\` for ${idleMinutes} minutes ` +
+    `with no workflow running.\n\nPR #${story.prNumber ?? '?'} likely needs its review re-run — ` +
+    `push an empty commit to the branch to re-trigger \`pr-review\`, or close and reopen the PR.`;
 
 try {
   if (story.prNumber) {
