@@ -215,6 +215,17 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
       `REVIEWER_TOKEN` unset and let the `github-actions` bot approve, or set it to a
       second PAT. GitHub refuses to let the account that opened a PR approve it, so
       sharing one token here deadlocks the pipeline on story 1
+- [ ] **If relying on the `github-actions` bot approval** (`REVIEWER_TOKEN` unset):
+      `can_approve_pull_request_reviews` must be `true` —
+      `gh api repos/<owner>/<repo>/actions/permissions/workflow` to check, set with
+      `gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow -f
+      default_workflow_permissions=read -F can_approve_pull_request_reviews=true`. It
+      defaults to `false` on a new repo. Without it, `pr-review`'s "Apply the review
+      verdict" step fails outright on an `approve` verdict — `failed to create review:
+      GitHub Actions is not permitted to approve pull requests` — even though the
+      review itself succeeded and branch protection, auto-merge, and everything else
+      here checks out clean. Found live on US-001: story-start worked, pr-review's
+      verdict was `approve`, and the PR still sat unapproved because of this alone.
 - [ ] `delete_branch_on_merge` is on —
       `gh api -X PATCH repos/<owner>/<repo> -F delete_branch_on_merge=true`. Nothing in
       the pipeline cleans up feature branches, and a 35-story project leaves 35 of them
