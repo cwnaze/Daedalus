@@ -129,6 +129,14 @@ if (pending.length) {
 
 // Last mutation of the state file is the pipeline's heartbeat: every transition
 // commits it, so its age is the age of the last thing that actually happened.
+//
+// A shallow clone cannot answer this: with one commit in it, every path looks created
+// by the tip, and the query below silently returns the last push to main instead of the
+// last transition. That is a wrong clock, not a missing one, so refuse to run rather
+// than emit a confident bad verdict. The workflow sets fetch-depth: 0 for this.
+if (sh('git', ['rev-parse', '--is-shallow-repository']) === 'true') {
+  throw new Error('shallow clone: cannot date the last transition. Set fetch-depth: 0 on the checkout.');
+}
 const lastTouch = new Date(sh('git', ['log', '-1', '--format=%cI', '--', 'stories.json']));
 const idleMinutes = Math.round((Date.now() - lastTouch.getTime()) / 60000);
 

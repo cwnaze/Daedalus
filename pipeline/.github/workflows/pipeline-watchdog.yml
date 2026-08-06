@@ -38,6 +38,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          # Required, not an optimization. watchdog.mjs dates the last transition
+          # with `git log -1 -- stories.json`, and checkout's default depth of 1
+          # leaves a clone where every path looks created by the tip commit — so
+          # that returns the last push to main whatever it touched. The stall
+          # clock silently measured "time since anyone pushed" instead.
+          fetch-depth: 0
       # setup-project is deliberately not used here: this job only runs the
       # pipeline's own scripts, so it needs the pipeline runtime and none of the
       # project's toolchain. Keeping it light means the recovery path still works
