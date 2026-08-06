@@ -60,6 +60,22 @@ and a wrong command fails every CI run until someone notices.
 If the project has no web surface, omit `serve` entirely and tell `story-breakdown` that
 every story is `demoKind: "command"`.
 
+**Set `services` whenever the stack needs a local dependency running for dev/CI** — a
+database, cache, queue, or anything else the app can't run without. This is easy to miss
+because nothing fails loudly when it's wrong: `services: null` silently skips
+`setup-project`'s "Start local services" step, and every later workflow
+(`ci`/`story-start`/`pr-review`/`pr-fix`/`production-prep`) just runs against whatever
+happens to not be there. A story can still pass its own verification if it starts the
+service itself inline, which papers over the gap until a later story (or `pr-review`,
+which does not know to start anything the story itself didn't) hits it cold. Found live:
+a project using Supabase (`npx supabase start` for local Postgres) shipped with
+`services: null`; `pr-review` never started it, and the story's own review silently
+produced no verdict rather than a clear error. If there's a `docker-compose.yml`/
+`compose.yml`, that's already the fallback and `services` can stay `null` — see the
+`python-django.json`/`ruby-rails.json` examples for the compose case, and set `services`
+to the literal startup command (e.g. `"npx supabase start"`) when there is no compose
+file to fall back to.
+
 **`.mcp.json`** staged at `/tmp/<project-slug>/mcp.json` for `repo-bootstrap` to commit — only the servers that survived the CLI-preference check in step 3:
 
 ```json

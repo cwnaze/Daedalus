@@ -211,6 +211,14 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
 - [ ] `node .github/scripts/validate-stories.mjs` passes on the committed `stories.json`
 - [ ] `node .github/scripts/read-manifest.mjs --print` shows the right toolchain. Every
       workflow reads `pipeline.json`; a wrong command there fails all of them identically
+- [ ] If the stack needs a local dependency for dev/CI (a database, cache, queue) and
+      there's no `docker-compose.yml`/`compose.yml`, `pipeline.json`'s `services` field
+      names the command that starts it (e.g. `"npx supabase start"`) — not `null`.
+      Nothing fails loudly when this is wrong: `setup-project`'s "Start local services"
+      step just skips silently, and a story can still pass its own review if it starts
+      the service itself inline, papering over the gap until `pr-review` (which does not
+      know to start anything the story didn't) hits it cold and produces no verdict
+      rather than a clear error
 - [ ] A reviewer identity exists that is **not** `PIPELINE_PAT`: either leave
       `REVIEWER_TOKEN` unset and let the `github-actions` bot approve, or set it to a
       second PAT. GitHub refuses to let the account that opened a PR approve it, so
