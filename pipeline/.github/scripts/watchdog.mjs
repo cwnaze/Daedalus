@@ -159,8 +159,54 @@ if (pending.length) {
 if (sh('git', ['rev-parse', '--is-shallow-repository']) === 'true') {
   throw new Error('shallow clone: cannot date the last transition. Set fetch-depth: 0 on the checkout.');
 }
-const lastTouch = new Date(sh('git', ['log', '-1', '--format=%cI', '--', 'stories.json']));
+const storiesTouch = new Date(sh('git', ['log', '-1', '--format=%cI', '--', 'stories.json']));
+
+// `stories.json` alone is no longer a heartbeat. A story now writes to main exactly
+// twice — in_progress before its branch is cut, and done after the merge — because
+// anything in between puts the open PR behind and sets off a re-review loop. So a story
+// under review legitimately leaves that file untouched for as long as review takes, and
+// dating the pipeline by it would call every slow review a stall.
+//
+// Progress is therefore the newest of three signals: the state file, the story's PR, and
+// the last emitter run that actually succeeded. Successful, not merely completed: a
+// failed run is the thing being detected below, so letting it count as progress would
+// cancel the detection out.
+const story = active[0];
+
+const openPrs = (() => {
+  try {
+    return JSON.parse(
+      sh('gh', ['pr', 'list', '--state', 'open', '--limit', '50', '--json', 'number,updatedAt,headRefName,body']),
+    );
+  } catch (e) {
+    console.error(`Could not list open PRs (${e.message}); treating the story as PR-less.`);
+    return [];
+  }
+})();
+
+const storyPr = openPrs.find(
+  (p) =>
+    (story.branch && p.headRefName === story.branch) ||
+    new RegExp(`^Story:\\s*${story.id}\\s*$`, 'm').test(p.body ?? ''),
+);
+
+const emitters = ['story-start', 'pr-review', 'pr-fix', 'story-complete', 'production-prep'];
+const lastSuccess = allRuns
+  .filter((r) => emitters.includes(r.name) && r.conclusion === 'success')
+  .map((r) => new Date(r.updated_at))
+  .sort((a, b) => b - a)[0];
+
+const signals = [storiesTouch];
+if (storyPr) signals.push(new Date(storyPr.updatedAt));
+if (lastSuccess) signals.push(lastSuccess);
+const lastTouch = new Date(Math.max(...signals.map((d) => d.getTime())));
 const idleMinutes = Math.round((Date.now() - lastTouch.getTime()) / 60000);
+console.log(
+  `Progress: stories.json ${storiesTouch.toISOString()}` +
+    (storyPr ? `, PR #${storyPr.number} ${storyPr.updatedAt}` : ', no open PR') +
+    (lastSuccess ? `, last success ${lastSuccess.toISOString()}` : '') +
+    ` -> idle ${idleMinutes}m.`,
+);
 
 // Elapsed time is a guess about whether anything is still coming. A completed run that
 // did not succeed is not a guess: these workflows only ever produce their successor's
@@ -169,9 +215,10 @@ const idleMinutes = Math.round((Date.now() - lastTouch.getTime()) / 60000);
 // *transition*, so a run that fails moments after committing one buys itself a nearly
 // full window plus up to an hour of cron slack.
 //
-// Only the workflows that emit pipeline events count. `ci` failing is a red build, which
-// pr-review is supposed to see and act on; that is the pipeline working, not stalling.
-const emitters = ['story-start', 'pr-review', 'pr-fix', 'story-complete', 'production-prep'];
+// Only the workflows that emit pipeline events count (`emitters`, above). `ci` failing is
+// a red build, which pr-review is supposed to see and act on; that is the pipeline
+// working, not stalling.
+//
 // `skipped`/`neutral`/`action_required` are not deaths: an `if:` that evaluated false or
 // a job awaiting approval. Only conclusions that mean "this run will never emit".
 const dead = ['failure', 'timed_out', 'startup_failure', 'cancelled'];
@@ -195,12 +242,13 @@ if (!stalled) {
   process.exit(0);
 }
 
-const story = active[0];
 const cause = failedSinceTouch.length
-  ? `${failedSinceTouch.length} failed run(s) since the last transition ` +
+  ? `${failedSinceTouch.length} failed run(s) since the last progress ` +
     `(${failedSinceTouch.map((r) => `${r.name}#${r.run_number} ${r.conclusion}`).join(', ')})`
   : `idle ${idleMinutes}m, no runs active`;
-console.log(`STALLED: ${story.id} is ${story.status}, ${cause}.`);
+console.log(
+  `STALLED: ${story.id} is ${story.status}${storyPr ? ` with PR #${storyPr.number} open` : ' with no open PR'}, ${cause}.`,
+);
 
 if (dryRun) {
   console.log('[dry run] stopping here.');
@@ -209,7 +257,12 @@ if (dryRun) {
 
 if (quotaBlocked()) process.exit(0);
 
-if (story.status === 'in_progress' && !exhausted) {
+// The open PR decides this, not `status`. A story stays `in_progress` in stories.json for
+// its whole review now, so the old `status === 'in_progress'` test would have re-dispatched
+// story-start against a story already under review. What actually distinguishes the two
+// cases is whether a PR exists: no PR means implement-story never finished and can resume;
+// a PR means the work landed and it is review that stopped.
+if (!storyPr && !exhausted) {
   // implement-story has crash-resume logic for exactly this: it finds the
   // non-terminal story, reconciles it against any open PR, and continues.
   // Nothing invoked that logic until this workflow existed.
@@ -218,22 +271,26 @@ if (story.status === 'in_progress' && !exhausted) {
   process.exit(0);
 }
 
-// Either the retry budget is gone, or this is in_review/fixing — where a PR exists and
-// re-running review is not ours to guess at, since pushing a commit or reopening the PR
-// would fabricate history. Escalate rather than act.
+// Either the retry budget is gone, or a PR is open — where re-running review is not ours
+// to guess at, since pushing a commit or reopening the PR would fabricate history, and an
+// empty commit would put the branch ahead for no reason. Escalate rather than act.
+const prNumber = storyPr?.number ?? story.prNumber;
 const note = exhausted
   ? `Pipeline watchdog: **${story.id}** is \`${story.status}\` and has burned all ` +
-    `${MAX_RETRIES} retries without making a transition.\n\nFailed runs:\n` +
+    `${MAX_RETRIES} retries without making progress.\n\nFailed runs:\n` +
     failedSinceTouch.map((r) => `- ${r.name} #${r.run_number} — ${r.conclusion} — ${r.html_url}`).join('\n') +
     `\n\nNot re-dispatching: three identical failures are a bug to fix, not a run to retry.`
-  : `Pipeline watchdog: **${story.id}** has been \`${story.status}\` for ${idleMinutes} minutes ` +
-    `with no workflow running.\n\nPR #${story.prNumber ?? '?'} likely needs its review re-run — ` +
+  : `Pipeline watchdog: **${story.id}** has shown no progress for ${idleMinutes} minutes ` +
+    `with no workflow running.\n\nPR #${prNumber ?? '?'} likely needs its review re-run — ` +
     `push an empty commit to the branch to re-trigger \`pr-review\`, or close and reopen the PR.`;
 
 try {
-  if (story.prNumber) {
-    sh('gh', ['pr', 'comment', String(story.prNumber), '--repo', repo, '--body', note]);
-    sh('gh', ['pr', 'edit', String(story.prNumber), '--repo', repo, '--add-label', 'needs-human']);
+  // `prNumber` from the live PR, not story.prNumber: that field is not written until the
+  // merge, so keying off it would post every escalation as a fresh issue and leave the
+  // actual stuck PR unlabelled.
+  if (prNumber) {
+    sh('gh', ['pr', 'comment', String(prNumber), '--repo', repo, '--body', note]);
+    sh('gh', ['pr', 'edit', String(prNumber), '--repo', repo, '--add-label', 'needs-human']);
   } else {
     sh('gh', ['issue', 'create', '--repo', repo, '--title', `Pipeline stalled: ${story.id}`, '--label', 'needs-human', '--body', note]);
   }

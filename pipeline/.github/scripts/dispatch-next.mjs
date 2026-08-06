@@ -95,24 +95,38 @@ function isPaused() {
  * with no ceiling and no alert. A day's worth of healthy pipeline is well under
  * the default.
  */
+// A fixed-rate cron cannot indicate a loop: pipeline-watchdog fires hourly whatever the
+// pipeline does, so its 24 runs/day were pure baseline — half the default budget, spent
+// before any real work. That left ~26 runs for everything else, about three stories, and
+// the breaker started tripping on healthy days. Excluding it costs no sensitivity,
+// because a runaway watchdog shows up as the runs it *dispatches*, which are counted.
+const UNCOUNTED_WORKFLOWS = new Set(['pipeline-watchdog']);
+
 function overBudget() {
   const max = Number(process.env.MAX_RUNS_PER_DAY ?? 50);
   if (max <= 0) return false;
   const since = new Date(Date.now() - 86400e3).toISOString();
   let count;
   try {
-    count = JSON.parse(sh('gh', ['api', `repos/${repo}/actions/runs?created=>${since}&per_page=100`])).total_count;
+    const res = JSON.parse(
+      sh('gh', ['api', `repos/${repo}/actions/runs?created=>${since}&per_page=100`]),
+    );
+    const runs = res.workflow_runs ?? [];
+    // One page caps at 100. Anything past it is unseen, so count it rather than
+    // undercount — at that volume the breaker should be tripping anyway.
+    const unseen = Math.max(0, (res.total_count ?? runs.length) - runs.length);
+    count = runs.filter((r) => !UNCOUNTED_WORKFLOWS.has(r.name)).length + unseen;
   } catch (e) {
     // Never let a failed budget lookup halt a healthy pipeline.
     console.error(`Could not count recent runs (${e.message}) — proceeding.`);
     return false;
   }
   if (count < max) {
-    console.log(`Budget: ${count}/${max} workflow runs in the last 24h.`);
+    console.log(`Budget: ${count}/${max} countable workflow runs in the last 24h.`);
     return false;
   }
   console.log(
-    `::error::Budget stop: ${count} workflow runs in the last 24h (limit ${max}). ` +
+    `::error::Budget stop: ${count} countable workflow runs in the last 24h (limit ${max}). ` +
       `Not dispatching. Raise MAX_RUNS_PER_DAY if this is expected, or investigate a loop.`,
   );
   return true;
