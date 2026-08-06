@@ -38,6 +38,35 @@ runs:
         echo "--- toolchain ---"
         node .github/scripts/read-manifest.mjs --print
 
+    # graphify-out/ is committed by repo-bootstrap. Installing the CLI here (not
+    # just locally) is what makes .claude/settings.json's PreToolUse hook resolve
+    # for the claude-code-action step later in this same job, and lets that agent
+    # query the graph instead of grepping the whole repo on every question.
+    - name: Install graphify
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v graphify >/dev/null 2>&1; then
+          if command -v uv >/dev/null 2>&1; then
+            uv tool install --quiet graphifyy
+          else
+            pip install --quiet graphifyy --break-system-packages 2>/dev/null \
+              || pip install --quiet --user graphifyy
+          fi
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        fi
+
+    # AST-only, no LLM cost. Keeps the graph in sync with whatever this job's
+    # checkout looks like without needing the git post-commit hook installed.
+    - name: Refresh graphify graph
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -f graphify-out/graph.json ]; then
+          export PATH="$HOME/.local/bin:$PATH"
+          graphify update . || echo "::warning::graphify update failed — continuing with the existing graph."
+        fi
+
     # Each of these is a no-op unless the manifest names that runtime. Adding a
     # language is one more block here plus one example manifest.
     - if: steps.manifest.outputs.runtime == 'python'

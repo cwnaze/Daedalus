@@ -6,4 +6,8 @@ build/
 .svelte-kit/
 playwright-report/
 test-results/
-.pipeline/       # review verdict handoff, CI-only
+# review verdict handoff, CI-only
+.pipeline/
+# machine-specific graphify paths, re-resolved automatically when missing
+graphify-out/.graphify_python
+graphify-out/.graphify_root
