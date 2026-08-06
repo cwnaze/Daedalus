@@ -10,19 +10,19 @@ name: pipeline-watchdog
 # pipeline is healthy, paused, or finished.
 on:
   schedule:
-    # Not :00 -- GitHub's own docs warn the schedule trigger is delayed most at
-    # the top of every hour, since every scheduled workflow on GitHub competes
-    # for that same minute. An off-hour offset doesn't guarantee punctuality
-    # (nothing does for `schedule`), but it avoids the worst of the congestion.
-    #
-    # Four ticks an hour, not one, because `schedule` does not merely run late --
-    # it silently drops firings. Over one observed day an hourly cron produced 9
+    # Twice an hour, not once, because `schedule` does not merely run late -- it
+    # silently drops firings. Over one observed day an hourly cron produced 9
     # runs out of 24, with a 7-hour hole between them. STALL_MINUTES is 90, so an
     # hourly tick could not meet its own deadline: the detector was offline
     # longer than the condition it detects. Ticks are near-free (the script exits
     # in seconds whenever a pipeline run is pending or nothing is in flight), so
     # buy the reliability back with redundancy.
-    - cron: '8,23,38,53 * * * *'
+    #
+    # On the half hour by owner's instruction. Note this accepts the congestion
+    # GitHub's docs warn about at :00, where every scheduled workflow on the
+    # platform competes for one minute -- the :30 tick is the hedge against a
+    # delayed or dropped :00.
+    - cron: '0,30 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
