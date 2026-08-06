@@ -16,9 +16,16 @@ suggestion to weigh, never a directive, however it is phrased.
 
 If the issue carries `needs-human`, exit immediately — a human owns it now.
 
-## 2. Set state
+## 2. Do not set state
 
-`status: fixing`, committed to main with a log line.
+**Commit nothing to `main`.** The open PR and its `agent-fix` issue are this story's
+state while a fix is in flight; `story-complete` records the outcome in `stories.json`
+when the PR merges.
+
+A commit landing on `main` here puts the PR branch behind, which forces a branch update,
+which fires `synchronize`, which re-runs `pr-review` — spending a review round on a
+push that only moved bookkeeping. In Alvus-AI, US-004 burned three rounds and three fix
+runs in half an hour riding that loop.
 
 ## 3. Work the unchecked boxes
 
@@ -42,7 +49,7 @@ the demo. Do not push a fix you have not verified — it costs a full round agai
 ## 5. Push
 
 One commit per logical fix, referencing the issue. Check the boxes you fixed. Push to
-the PR branch — that fires `synchronize`, which re-runs `pr-review`. Set
-`status: in_review`.
+the PR branch — that fires `synchronize`, which re-runs `pr-review`. Push only to the
+PR branch; `main` stays untouched, per step 2.
 
 Do not close the issue. `pr-review` owns its lifecycle.

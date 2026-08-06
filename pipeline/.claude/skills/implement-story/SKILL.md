@@ -106,4 +106,12 @@ or review on `main`; `repo-bootstrap` verifies both. If the command fails, do no
 back to merging directly — report it, because an agent that merges on its own judgement
 has no check on it.
 
-Set `prNumber`, `status: in_review`, commit to main with a log line.
+**Do not commit anything to main from here on.** The PR is now the record of this
+story's state, and `story-complete` writes `prNumber`, `issueNumber` and `reviewRounds`
+to `stories.json` in one commit when it merges.
+
+This is a hard rule, not a preference. `main` has a strict up-to-date requirement, so
+any commit landing there while the PR is open puts the branch behind, which forces a
+branch update, which fires `synchronize`, which re-runs `pr-review`, which commits
+again. In Alvus-AI, US-004 burned three review rounds and three fix runs in half an hour
+riding that loop. Between opening the PR and merging it, `main` must not move.

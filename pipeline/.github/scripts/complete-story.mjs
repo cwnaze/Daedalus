@@ -18,9 +18,6 @@ const db = JSON.parse(fs.readFileSync('stories.json', 'utf8'));
 const story = db.stories.find((s) => s.id === storyId);
 if (!story) throw new Error(`${storyId} not found in stories.json`);
 
-story.status = 'done';
-fs.writeFileSync('stories.json', JSON.stringify(db, null, 2) + '\n');
-
 // Trust the event over the record: story.prNumber is whatever the last writer
 // put there, and if a PR was superseded the two disagree — which would close
 // the wrong issue and log a merge that did not happen.
@@ -29,33 +26,56 @@ if (story.prNumber && String(story.prNumber) !== String(mergedPr)) {
   console.log(`::warning::stories.json records PR #${story.prNumber} but #${mergedPr} merged. Using the merged one.`);
 }
 
-const line = `${new Date().toISOString()} | ${storyId} | done | PR #${mergedPr} merged after ${story.reviewRounds} review round(s)\n`;
-fs.appendFileSync('docs/pipeline-log.md', line);
-
-// story.issueNumber is written by pr-review, which is an agent following a skill — so
-// treat it as a hint, not a guarantee. When it is missing, fall back to the issue body,
-// which pr-review is templated to open with a literal `PR: #<n>` line. Without this
-// fallback a single skipped bookkeeping step leaks an open findings issue per story,
-// silently, with the merge otherwise looking clean.
-const toClose = new Set();
-if (story.issueNumber) toClose.add(Number(story.issueNumber));
+// Nothing between "PR opened" and "PR merged" writes to main any more: a commit landing
+// there while the PR is open puts its branch behind, and under a strict up-to-date rule
+// that forces a branch update, which fires `synchronize`, which re-runs pr-review, which
+// commits again. In Alvus-AI, US-004 burned three review rounds and three fix runs in
+// half an hour riding that loop. So the review's own bookkeeping is reconstructed here
+// instead, at merge time, which is the first moment writing to main is free again.
+//
+// The findings issue is where that state actually lived: pr-review opens it with a
+// literal `PR: #<n>` line and re-headings it `(round N)` on each pass.
+let issues = [];
 try {
-  const open = JSON.parse(
-    sh('gh', ['issue', 'list', '--state', 'open', '--limit', '100', '--json', 'number,body']),
+  issues = JSON.parse(
+    sh('gh', ['issue', 'list', '--state', 'all', '--limit', '100', '--json', 'number,title,body,state']),
+  ).filter(
+    (i) =>
+      new RegExp(`^PR:\\s*#${mergedPr}\\s*$`, 'm').test(i.body ?? '') ||
+      (story.issueNumber && i.number === Number(story.issueNumber)),
   );
-  for (const i of open) {
-    if (new RegExp(`^PR:\\s*#${mergedPr}\\s*$`, 'm').test(i.body ?? '')) toClose.add(i.number);
-  }
 } catch (e) {
-  console.error(`Could not list open issues: ${e.message}`);
+  console.error(`Could not list issues: ${e.message}`);
 }
 
-for (const n of toClose) {
+// The body heading is authoritative, not the title: pr-review rewrites the body in place
+// each round but leaves the title at whatever round opened the issue. Alvus-AI's US-004
+// issue read "(round 1)" in its title while its body was already on round 2.
+const roundOf = (i) => {
+  const m =
+    (i.body ?? '').match(/^#[^\n]*\(round\s+(\d+)\)/im) ?? (i.title ?? '').match(/\(round\s+(\d+)\)/i);
+  return m ? Number(m[1]) : 0;
+};
+
+const rounds = Math.max(story.reviewRounds ?? 0, 0, ...issues.map(roundOf));
+const findingsIssue = issues.length ? issues[0].number : (story.issueNumber ?? null);
+
+story.status = 'done';
+story.prNumber = Number(mergedPr);
+story.issueNumber = findingsIssue;
+story.reviewRounds = rounds;
+fs.writeFileSync('stories.json', JSON.stringify(db, null, 2) + '\n');
+
+const line = `${new Date().toISOString()} | ${storyId} | done | PR #${mergedPr} merged after ${rounds} review round(s)\n`;
+fs.appendFileSync('docs/pipeline-log.md', line);
+
+for (const i of issues) {
+  if (i.state !== 'OPEN') continue;
   try {
-    sh('gh', ['issue', 'close', String(n), '--comment', `Resolved: PR #${mergedPr} merged.`]);
-    console.log(`Closed findings issue #${n}.`);
+    sh('gh', ['issue', 'close', String(i.number), '--comment', `Resolved: PR #${mergedPr} merged.`]);
+    console.log(`Closed findings issue #${i.number}.`);
   } catch (e) {
-    console.error(`Could not close issue #${n}:`, e.message);
+    console.error(`Could not close issue #${i.number}:`, e.message);
   }
 }
 

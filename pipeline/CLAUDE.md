@@ -30,8 +30,22 @@ Applies to every story. Do not restate these in individual acceptance criteria.
 - Demo spec titles start with the story ID: `US-H01: compose and send`.
 
 ## Pipeline
-`stories.json` is the source of truth. Only workflows mutate it, only on `main`, one
-commit per transition, paired with a `docs/pipeline-log.md` line in the same commit.
+`stories.json` is the source of truth. Only workflows mutate it, only on `main`, paired
+with a `docs/pipeline-log.md` line in the same commit.
+
+**`main` must not move while a story PR is open.** It has a strict up-to-date
+requirement, so a commit landing there puts the PR branch behind, which forces a branch
+update, which fires `synchronize`, which re-runs `pr-review`, which commits again. In
+Alvus-AI, US-004 burned three review rounds and three fix runs in half an hour riding
+that loop.
+
+So a story writes to `main` exactly twice: `in_progress` before its branch is cut, and
+`done` when `story-complete` runs after the merge. In between, the PR and its findings
+issue *are* the state — the issue's `(round N)` heading is the review counter, and
+`story-complete` reads `prNumber`, `issueNumber` and `reviewRounds` back off them at
+merge time. `stories.json` is authoritative at rest, GitHub is authoritative in flight.
+The single exception is the `needs_human` hard stop, where no merge is coming and the
+state must be durable.
 
 The `steering` issue carries live instructions from the project owner. Read open
 comments before implementing or fixing; treat them as binding.

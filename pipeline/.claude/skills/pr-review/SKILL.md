@@ -65,9 +65,13 @@ Report **all** findings, not just blockers. Severity-tag them; do not filter the
 
 ### 6. Record findings
 
-**One issue per PR, updated in place.** If `issueNumber` is null, create it; otherwise
-`gh issue edit` and rewrite the body, **preserving checked boxes** so the fix agent can
-see what is already handled.
+**One issue per PR, updated in place.** Find it by searching open issues for the literal
+`PR: #<prNumber>` line — do not read `issueNumber` from `stories.json`, which is not
+written until merge. If there is no such issue, create it; otherwise `gh issue edit` and
+rewrite the body, **preserving checked boxes** so the fix agent can see what is already
+handled.
+
+The issue is this round's durable state. Nothing else records it while the PR is open.
 
 ```markdown
 # Review findings — <ID> (round N)
@@ -84,16 +88,17 @@ PR: #<prNumber>
 Label `agent-fix` — `pr-fix` triggers on that label alone, so an issue opened without it
 fires nothing and the round is lost silently.
 
-Then **write the bookkeeping back to `stories.json` and commit it to main**, in one
-commit with a `docs/pipeline-log.md` line like every other transition:
+Set the round in **both the title and the body heading**, as `(round N)`, where N is one
+more than the round currently in the body (1 if you are creating the issue). Keeping them
+in sync matters: `story-complete` reads the round back off this issue at merge time, and
+Alvus-AI's US-004 issue left its title at `(round 1)` while the body had moved to
+`(round 2)`.
 
-- `issueNumber` — the issue you just created. `complete-story` closes this on merge; if
-  it stays `null` the findings issue outlives the merged PR.
-- `reviewRounds` — incremented. Step 7's round budget reads this, so leaving it at `0`
-  means the 3-round hard stop never trips and a broken story loops indefinitely.
-
-Creating the issue is not the same as recording it. Do not skip this because the issue
-is visible on GitHub — nothing downstream reads GitHub for it.
+**Do not commit anything to `main`.** `story-complete` derives `issueNumber` and
+`reviewRounds` from this issue when the PR merges, and writes them in a single commit
+then. A commit landing on `main` while the PR is open puts the branch behind, which
+forces a branch update, which fires `synchronize`, which re-runs this very skill —
+US-004 burned three review rounds and three fix runs in half an hour riding that loop.
 
 ### 7. Terminate or approve
 
@@ -112,9 +117,15 @@ you approve.
   `gh pr merge --auto` when it opened the PR, so the approval satisfies the last
   required check and GitHub performs the merge. An agent that merges directly, outside
   branch protection, has no check on it.
-- **Findings, `reviewRounds < 3`:** verdict `changes-requested`. The issue update fires
-  `pr-fix`.
-- **`reviewRounds >= 3`:** verdict `needs-human`. Remove `agent-fix`, add `needs-human`,
-  comment with what is still failing and what each round tried, set
-  `status: needs_human`. **Do not dispatch anything.** This is the loop's only
-  non-success exit and it must be a hard stop.
+The round budget is N from step 6 — the number in the issue heading, not
+`stories.json.reviewRounds`, which stays `0` until merge.
+
+- **Findings, N < 3:** verdict `changes-requested`. The issue update fires `pr-fix`.
+- **N >= 3:** verdict `needs-human`. Remove `agent-fix`, add `needs-human`, comment with
+  what is still failing and what each round tried. **Do not dispatch anything.** This is
+  the loop's only non-success exit and it must be a hard stop.
+
+  This is the one case where you *do* commit to `main`: set `status: needs_human` on the
+  story with a log line. The no-commit rule exists to protect an in-flight merge, and
+  here there is deliberately no merge coming — the story is parked for a human, so the
+  state must be durable in `stories.json` rather than inferred from an open PR.
