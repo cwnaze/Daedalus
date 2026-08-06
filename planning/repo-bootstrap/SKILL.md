@@ -233,6 +233,15 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
       progress, so this failure mode looks like nothing happened rather than like an
       error — surface it explicitly in the handoff report rather than assuming a clean
       dispatch means the pipeline is actually running.
+- [ ] Every workflow that runs `anthropics/claude-code-action` (`story-start`,
+      `pr-review`, `pr-fix`, `production-prep`) has `--allowedTools` in its
+      `claude_args` including at minimum `Bash,Edit,Write,Glob,Grep`. The action's
+      default permissions are read-only file ops + comments only — no Bash. Without
+      this, `implement-story` (and every other pipeline skill) cannot run npm, git, gh,
+      or wrangler: the job reports `success` after burning its full turn budget having
+      created no branch, no commit, and no PR. This does not surface as an error
+      anywhere — verify the `claude_args` line directly, don't infer it from a green
+      run.
 - [ ] `gh workflow list` shows all eight workflows registered: `ci`, `story-start`,
       `pr-review`, `pr-fix`, `story-complete`, `production-prep`, `pipeline-watchdog`,
       `notify`

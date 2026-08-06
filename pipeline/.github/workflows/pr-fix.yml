@@ -37,4 +37,5 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.PIPELINE_PAT }}
           prompt: /pr-fix
-          claude_args: --max-turns 120
+          # See story-start.yml: default action permissions have no Bash access.
+          claude_args: --max-turns 120 --allowedTools "Bash,Edit,Write,Glob,Grep"

@@ -39,4 +39,9 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.PIPELINE_PAT }}
           prompt: "/implement-story ${{ inputs.dry_run && '(dry run - select and print the plan, write nothing)' || '' }}"
-          claude_args: --max-turns 120
+          # Default action permissions are read-only file ops + comments -- no Bash.
+          # implement-story runs npm/wrangler/drizzle/playwright/git/gh; without this
+          # every one of those calls is silently denied and the job "succeeds" having
+          # done nothing (found bootstrapping Alvus-AI's US-001: 11 permission
+          # denials, 0 output -- 21 turns and not one file touched).
+          claude_args: --max-turns 120 --allowedTools "Bash,Edit,Write,Glob,Grep"
