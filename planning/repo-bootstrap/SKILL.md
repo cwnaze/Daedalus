@@ -75,14 +75,80 @@ e2e/                          # harness: demo.ts (browser) + demo-command.mjs (n
 playwright.config.ts          # includes the webServer block that serves the app in CI
 scripts/sync-secrets.sh       # pushes .env values up to repo secrets
 README.md
-.gitignore                    # must include .env and .pipeline/
+.gitignore                    # must include .env, .pipeline/, and the two graphify
+                              #   dotfiles below — each as its OWN line, comment above
+                              #   it, never trailing on the same line (gitignore does
+                              #   not strip trailing "pattern  # comment"; only a line
+                              #   starting with # is a comment, so anything after a
+                              #   pattern on the same line becomes part of the pattern
+                              #   and silently never matches)
+.claude/settings.json         # graphify's PreToolUse hook — merge into an existing
+                              #   file's "hooks" key rather than overwrite (see below)
+graphify-out/                 # knowledge graph — graph.json, GRAPH_REPORT.md,
+                              #   graph.html, manifest.json, cost.json, cache/ committed;
+                              #   graphify-out/.graphify_python and .graphify_root
+                              #   gitignored (machine-specific, re-resolved automatically)
 ```
+
+**graphify — always wired in, both locally and in CI.** After assembling the file list
+above (before the commit), run `/graphify .` on the freshly cloned repo, then
+`graphify claude install`. This writes the `## graphify` section into `CLAUDE.md` and a
+`PreToolUse` hook into `.claude/settings.json` — if `.claude/settings.json` already
+exists (existing-repo path), merge the `hooks` key rather than overwrite. The install
+step defaults the hook's command to this machine's absolute `graphify` binary path,
+which no-ops (non-blocking, does not fail the build) on any other machine — including
+every CI runner. Fix it to the bare command before committing:
+
+```bash
+sed -i 's#/[^"]*/graphify hook-guard#graphify hook-guard#' .claude/settings.json
+```
+
+Then add a `graphify` install step plus an incremental `graphify update .` (AST-only, no
+LLM cost) to `.github/actions/setup-project/action.yml`, right after the manifest step —
+this is what makes the CI-run agents (`story-start`, `pr-review`, `pr-fix`,
+`production-prep`) resolve the hook and actually query the graph instead of grepping the
+whole repo cold on every question, which is where most of this pipeline's token spend
+happens:
+
+```yaml
+    - name: Install graphify
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v graphify >/dev/null 2>&1; then
+          if command -v uv >/dev/null 2>&1; then
+            uv tool install --quiet graphifyy
+          else
+            pip install --quiet graphifyy --break-system-packages 2>/dev/null \
+              || pip install --quiet --user graphifyy
+          fi
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        fi
+
+    - name: Refresh graphify graph
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -f graphify-out/graph.json ]; then
+          export PATH="$HOME/.local/bin:$PATH"
+          graphify update . || echo "::warning::graphify update failed — continuing with the existing graph."
+        fi
+```
+
+No API key is needed for any of this — graphify extracts code structurally (AST, free)
+and falls back to the host agent itself for docs/papers/images when no
+`GEMINI_API_KEY`/`GOOGLE_API_KEY` is set. Never prompt the user for one.
+
+Split-repo projects: graphify each repo separately — a non-spine repo's code benefits
+the same way, and `graphify-out/` belongs in both the spine and non-spine file lists
+below, not just the spine's.
 
 **Split-repo rule: the pipeline lives in the spine repo only.** The spine gets
 everything above. A non-spine repo gets `CLAUDE.md`, `.env.example`, `.mcp.json`,
 its own `pipeline.json` (a split project's two repos rarely share a stack),
-`docs/`, the `e2e/` harness, `scripts/`, and `ci.yml` — and **none** of
-`story-start`, `pr-review`, `pr-fix`, `story-complete`, `production-prep`,
+`docs/`, the `e2e/` harness, `scripts/`, `ci.yml`, and its own `graphify-out/` +
+`.claude/settings.json` + the graphify install/update steps in `setup-project` — and
+**none** of `story-start`, `pr-review`, `pr-fix`, `story-complete`, `production-prep`,
 `pipeline-watchdog`, or `.github/scripts/`.
 
 Every one of those reads `stories.json` off the filesystem, so a second copy would
@@ -155,13 +221,28 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
 - [ ] Labels exist: `agent-fix`, `needs-human`, `steering`
 - [ ] The steering issue exists, labeled `steering`, pinned. Its body should say that
       commenting `pause` halts dispatch and `resume` restarts it
-- [ ] `gh workflow run story-start.yml` dispatches without error
+- [ ] `gh workflow run story-start.yml` dispatches without error. Check the run's
+      status, not just that the `gh` command itself returned 0 — GitHub flags a workflow
+      file's *first* run as potentially unsafe whenever it invokes a third-party action
+      (every workflow here calls `anthropics/claude-code-action`), and holds it with
+      zero jobs created: `gh run list` shows `completed` / `action_required`. This is a
+      one-time gate per workflow file's content, not specific to this dispatch — a human
+      with write access must open the run and click **Approve and run** once for each of
+      `story-start`, `pr-review`, `pr-fix`, and `production-prep` before the chain can
+      move at all. Because the job never starts, the story never gets marked in
+      progress, so this failure mode looks like nothing happened rather than like an
+      error — surface it explicitly in the handoff report rather than assuming a clean
+      dispatch means the pipeline is actually running.
 - [ ] `gh workflow list` shows all eight workflows registered: `ci`, `story-start`,
       `pr-review`, `pr-fix`, `story-complete`, `production-prep`, `pipeline-watchdog`,
       `notify`
 - [ ] `gh workflow run pipeline-watchdog.yml -f dry_run=true` reports the pipeline as
       idle rather than erroring — this is the recovery path for a crashed run, and it
       is worth knowing it works before you need it
+- [ ] `graphify-out/graph.json` and `.claude/settings.json` are committed, the hook
+      command in `.claude/settings.json` is the bare `graphify hook-guard ...` (not an
+      absolute path), and `setup-project` installs `graphify` — otherwise the CI-run
+      agents silently fall back to grepping the repo cold on every question
 
 ### 5. Dry run
 

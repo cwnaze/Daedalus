@@ -177,6 +177,26 @@ story-start → PR (auto-merge armed) → pr-review → issue → pr-fix ─┐
 pipeline-watchdog (hourly) ──→ resumes or escalates a stalled run
 ```
 
+**The first run of each workflow needs a manual click.** GitHub flags a workflow file's
+*first* run as potentially unsafe — this triggers on any workflow invoking a third-party
+action (every workflow here uses `anthropics/claude-code-action`), not just ones from
+outside contributors. `gh run list` shows it as `completed` / `action_required`, with no
+jobs ever created; `repo-bootstrap` dispatching `story-start.yml` at the end of bootstrap
+is the first time this fires. It is a one-time gate per workflow file's content: approve
+it once and later runs of that same file go straight through.
+
+To clear it: open the flagged run — `gh run view <run-id> --repo <owner>/<repo> --web`,
+or `https://github.com/<owner>/<repo>/actions/runs/<run-id>` — review the workflow file,
+and click **Approve and run**. Expect to do this once each for `story-start`,
+`pr-review`, `pr-fix`, and `production-prep` (whichever fire first). `ci` and
+`pipeline-watchdog` don't call `claude-code-action` and aren't gated the same way — but
+until you approve `story-start`, every dispatch of it stays blocked with zero jobs
+created, including `pipeline-watchdog`'s own automatic redispatch and
+`dispatch-next.mjs`'s repository_dispatch chaining. Since the job never runs, the story
+never gets marked in progress, so this can look like nothing happened rather than like a
+failure — check `gh run list --workflow story-start.yml` for `action_required` runs with
+no job history if the pipeline seems idle right after bootstrap.
+
 ## Controlling it from a phone
 
 No UI needed. The pinned `steering` issue is the input channel — comment on it and
