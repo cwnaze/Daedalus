@@ -25,7 +25,11 @@ const dryRun = process.env.DRY_RUN === 'true';
 // text names no explicit reset time.
 const windowHours = Number(process.env.QUOTA_WINDOW_HOURS ?? 5);
 
-const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
+// Default execFileSync maxBuffer is 1MB. `actions/runs?per_page=100` can return well
+// over that once a repo has ~100+ workflow runs (100 full run objects, ~1.2MB), which
+// crashes every tick with `spawnSync gh ENOBUFS`. Run history only grows, so give real
+// headroom rather than a size this will eventually outgrow again.
+const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }).trim();
 
 /**
  * Did the last Claude-backed run die on quota, and is that window still closed?
