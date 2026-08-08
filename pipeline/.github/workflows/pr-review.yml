@@ -6,10 +6,17 @@ on:
     types: [created]
 
 concurrency:
-  # Same group as story-start/pr-fix/story-complete: all four commit stories.json
-  # to main, and two of them running at once means one push loses the race.
-  # Serializing is free here — the invariant is one non-terminal story at a time.
-  group: story-pipeline
+  # Scoped to this PR, NOT the shared story-pipeline group: pr-review doesn't
+  # commit stories.json to main, so it has no business queuing behind
+  # story-start/pr-fix/story-complete. It did once (Alvus-AI PR #20,
+  # 2026-08-08) — a pr-fix run occupied story-pipeline, this workflow's
+  # re-review queued behind it, and a second pr-fix run (triggered by the
+  # same issue being edited) evicted the still-pending pr-review from the
+  # queue before it ever started. The fixed commit went un-reviewed and the
+  # PR stayed stuck on a stale CHANGES_REQUESTED despite green checks. A
+  # PR-scoped group can still only be evicted by another pr-review run on
+  # the *same* PR.
+  group: pr-review-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 permissions:
