@@ -129,3 +129,10 @@ The round budget is N from step 6 — the number in the issue heading, not
   story with a log line. The no-commit rule exists to protect an in-flight merge, and
   here there is deliberately no merge coming — the story is parked for a human, so the
   state must be durable in `stories.json` rather than inferred from an open PR.
+
+  This workflow runs in its own per-PR concurrency group, not the shared
+  `story-pipeline` group `story-start`/`pr-fix`/`story-complete` use — so this commit is
+  not serialized against theirs and can race a concurrent write to `stories.json`. Push
+  with retry: `git fetch origin main`, re-apply your edit on top of the latest
+  `origin/main` (don't assume your working copy is still current), and retry on a
+  rejected push rather than force-pushing over it.
