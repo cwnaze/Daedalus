@@ -1,7 +1,11 @@
 name: pr-fix
 on:
   issues:
-    types: [opened, edited]
+    # 'labeled' matters on its own: the pr-review skill's documented model is
+    # "Label agent-fix — pr-fix triggers on that label alone" (SKILL.md), but a
+    # pure label add with no body change only fires GitHub's 'labeled' event,
+    # not 'edited'. Without this, that path silently fires nothing.
+    types: [opened, edited, labeled]
 
 concurrency:
   # Shared with every other workflow that commits stories.json to main.

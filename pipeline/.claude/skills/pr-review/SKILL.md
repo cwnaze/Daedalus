@@ -102,6 +102,15 @@ US-004 burned three review rounds and three fix runs in half an hour riding that
 
 ### 7. Terminate or approve
 
+**This step is not optional and does not follow automatically from step 6.** Filing
+the findings issue is not the end of the review — a run that stops after step 6 without
+this file is an incomplete review, not a finished one, no matter how thorough the issue
+is. (Alvus-AI's PR #28 / US-013, 2026-08-09: the agent filed a complete, well-verified
+findings issue and then stopped — no verdict file, no `agent-fix` label. The workflow's
+fallback had no real signal to act on and defaulted to `needs-human` for a PR that had
+no blocking findings at all. Do not let this be step 8 you meant to get to; it is part
+of step 7, in the same turn as filing or updating the issue.)
+
 Record the verdict by writing `.pipeline/review-verdict.json`:
 
 ```json

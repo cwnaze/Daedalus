@@ -70,10 +70,48 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f .pipeline/review-verdict.json ]; then
-            echo "::error::pr-review wrote no verdict — treating as inconclusive."
-            gh pr comment "$PR" --body "pr-review finished without recording a verdict. This needs a human." || true
-            gh pr edit "$PR" --add-label needs-human || true
-            exit 1
+            # Alvus-AI PR #28 (US-013, 2026-08-09): the review agent did the
+            # full review and filed the findings issue (step 6) but exited
+            # before writing this file (step 7) — turns/budget left over, no
+            # error, it just treated "filed the issue" as done. That issue is
+            # real signal the plain needs-human fallback below was throwing
+            # away. Recover the verdict from it before giving up: the same
+            # derivation the skill itself uses (no blocking findings ->
+            # approve, findings under the round budget -> changes-requested,
+            # otherwise needs-human) applied to whatever issue this run
+            # should have written.
+            echo "::warning::pr-review wrote no verdict file. Trying to recover it from its findings issue before giving up."
+            issue=$(gh issue list --state open --json number,title,body,labels --limit 100 \
+              | jq -c --arg pr "$PR" '[.[] | select(.body | test("PR: #" + $pr + "($|[^0-9])"))] | .[0] // empty')
+            if [ -z "$issue" ]; then
+              echo "::error::No findings issue references PR #$PR either — truly inconclusive."
+              gh pr comment "$PR" --body "pr-review finished without recording a verdict or a findings issue. This needs a human." || true
+              gh pr edit "$PR" --add-label needs-human || true
+              exit 1
+            fi
+            issue_num=$(echo "$issue" | jq -r '.number')
+            if echo "$issue" | jq -e '.labels | any(.name == "needs-human")' >/dev/null; then
+              echo "Issue #$issue_num already carries needs-human — the agent made that call itself; respecting it."
+              gh pr edit "$PR" --add-label needs-human || true
+              exit 1
+            fi
+            round=$(echo "$issue" | jq -r '.title' | grep -oE 'round [0-9]+' | grep -oE '[0-9]+' || echo 1)
+            blocking=$(echo "$issue" | jq -r '.body' | awk '/^## Blocking/{f=1;next} /^## /{f=0} f' | grep -c '^- \[' || true)
+            echo "Recovered from issue #$issue_num: round=$round blocking_findings=${blocking:-0}"
+            note="(recovered: pr-review omitted its verdict file this run; derived from issue #$issue_num's recorded findings)"
+            if [ "${blocking:-0}" -eq 0 ]; then
+              gh pr review "$PR" --approve --body "No blocking findings in #$issue_num. $note"
+            elif [ "$round" -lt 3 ]; then
+              body=$(echo "$issue" | jq -r '.body')
+              printf '%s\n\n---\n_pr-review omitted its verdict file this run; the workflow fallback recovered this as changes-requested and routed it to pr-fix._\n' "$body" \
+                | gh issue edit "$issue_num" --add-label agent-fix --body-file -
+              gh pr review "$PR" --request-changes --body "Findings in #$issue_num (round $round), routed to pr-fix. $note"
+            else
+              gh pr edit "$PR" --add-label needs-human || true
+              gh pr comment "$PR" --body "Round $round findings in #$issue_num with no verdict recorded. $note" || true
+              exit 1
+            fi
+            exit 0
           fi
           verdict=$(jq -r .verdict .pipeline/review-verdict.json)
           summary=$(jq -r '.summary // ""' .pipeline/review-verdict.json)
