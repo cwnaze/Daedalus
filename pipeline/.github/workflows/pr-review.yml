@@ -48,6 +48,7 @@ jobs:
           key: demos-${{ github.base_ref }}-${{ github.sha }}
           restore-keys: demos-${{ github.base_ref }}-
       - uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1
+        id: claude
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # PIPELINE_PAT here so the findings issue it opens actually triggers
@@ -67,6 +68,9 @@ jobs:
           # bot approves, which satisfies a plain "require approvals" rule.
           GH_TOKEN: ${{ secrets.REVIEWER_TOKEN || secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # Raw SDK message stream from the step above — see quota-signal.mjs.
+          # Empty when the step never got far enough to write one.
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
           set -euo pipefail
           if [ ! -f .pipeline/review-verdict.json ]; then
@@ -84,7 +88,30 @@ jobs:
             issue=$(gh issue list --state open --json number,title,body,labels --limit 100 \
               | jq -c --arg pr "$PR" '[.[] | select(.body | test("PR: #" + $pr + "($|[^0-9])"))] | .[0] // empty')
             if [ -z "$issue" ]; then
-              echo "::error::No findings issue references PR #$PR either — truly inconclusive."
+              # Alvus-AI PR #34 (US-016, 2026-08-09): the Claude step died
+              # is_error:true with no findings issue and nothing quota-shaped
+              # in the console log (it's sanitized — see quota-signal.mjs),
+              # and this fallback called it needs-human. It was actually the
+              # 5-hour usage limit: the reset time only survives in the SDK's
+              # raw message stream, which the step above writes unsanitized
+              # to $EXECUTION_FILE. Check that before giving up on a human
+              # decision — a quota hit is not one, the watchdog resumes it on
+              # its own once the window reopens.
+              quota=""
+              if [ -n "${EXECUTION_FILE:-}" ] && [ -f "$EXECUTION_FILE" ]; then
+                quota=$(node .github/scripts/quota-signal.mjs "$EXECUTION_FILE" | grep '^blocked ' || true)
+              fi
+              if [ -n "$quota" ]; then
+                until="${quota#blocked }"
+                echo "::warning::Claude quota signal found in execution file; expected back $until."
+                gh label create quota-blocked --color 5319e7 \
+                  --description "Claude quota hit mid-run; pipeline-watchdog retries automatically once it resets" \
+                  --force >/dev/null 2>&1 || true
+                gh pr edit "$PR" --add-label quota-blocked || true
+                gh pr comment "$PR" --body "pr-review hit the Claude usage limit mid-run (expected back around $until). No human action needed — pipeline-watchdog will push an empty commit to re-trigger review once the window reopens." || true
+                exit 1
+              fi
+              echo "::error::No findings issue references PR #$PR either, and no quota signal found — truly inconclusive."
               gh pr comment "$PR" --body "pr-review finished without recording a verdict or a findings issue. This needs a human." || true
               gh pr edit "$PR" --add-label needs-human || true
               exit 1

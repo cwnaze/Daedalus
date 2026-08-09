@@ -237,7 +237,9 @@ Run every check and report pass/fail. **Do not dispatch story 1 until all pass.*
 - [ ] `delete_branch_on_merge` is on —
       `gh api -X PATCH repos/<owner>/<repo> -F delete_branch_on_merge=true`. Nothing in
       the pipeline cleans up feature branches, and a 35-story project leaves 35 of them
-- [ ] Labels exist: `agent-fix`, `needs-human`, `steering`
+- [ ] Labels exist: `agent-fix`, `needs-human`, `steering`, `quota-blocked` (the last
+      one is also self-created by `pr-review.yml` on first use, so this is a
+      convenience, not a hard requirement)
 - [ ] The steering issue exists, labeled `steering`, pinned. Its body should say that
       commenting `pause` halts dispatch and `resume` restarts it
 - [ ] `gh workflow run story-start.yml` dispatches without error. Check the run's
