@@ -42,9 +42,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
   issues: write
-  pull-requests: write
 
 jobs:
   watch:
@@ -60,12 +59,6 @@ jobs:
           # that returns the last push to main whatever it touched. The stall
           # clock silently measured "time since anyone pushed" instead.
           fetch-depth: 0
-          # recoverQuotaBlockedPrs() pushes an empty commit to a stalled PR's branch
-          # once the Claude quota window reopens, to re-trigger pr-review's
-          # `synchronize` listener. A push authenticated with the default
-          # GITHUB_TOKEN would succeed but fire no event for another workflow to
-          # react to — the same silent-no-op trap this pipeline's issue-creation
-          # calls already route around by using PIPELINE_PAT.
           token: ${{ secrets.PIPELINE_PAT }}
       # setup-project is deliberately not used here: this job only runs the
       # pipeline's own scripts, so it needs the pipeline runtime and none of the

@@ -9,30 +9,22 @@
  *
  * Auth is a Claude subscription OAuth token, so the pipeline shares one quota with
  * everything else that token runs. Exhausting it looks exactly like a stall — the run
- * dies, no event follows — and the naive response, re-dispatching, spends the quota
- * that is already gone. So every dispatch below is gated on quotaBlocked().
- *
- * Separately, a PR whose pr-review run died on quota is labeled `quota-blocked` by
- * pr-review.yml itself (not this script) at the moment it happens, using the Claude
- * action's own execution log rather than the after-the-fact `gh run view --log`
- * this script relies on for the general stall case — see quota-signal.mjs for why
- * that split exists. recoverQuotaBlockedPrs() below watches for the window
- * reopening and resumes those PRs directly, ahead of and independent of the
- * stories.json-driven stall detection.
+ * dies, no event follows. There is no reliable way to tell the two apart from CI (the
+ * action's console log is sanitized, and a usage-limit death can look identical to any
+ * other failure), so this script does not try: a quota exhaustion is handled the same
+ * as any other stall or failed run, and the needs-human escalation below just flags
+ * the possibility so a human can retry with an empty commit once the window reopens,
+ * instead of chasing a bug that isn't there.
  *
  * Env: GH_TOKEN (PIPELINE_PAT), REPO, STALL_MINUTES, DRY_RUN
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { checkQuotaText } from './quota-signal.mjs';
 
 const repo = process.env.REPO;
 if (!repo) throw new Error('REPO is required');
 const stallMinutes = Number(process.env.STALL_MINUTES ?? 90);
 const dryRun = process.env.DRY_RUN === 'true';
-// Claude subscription quota refills on a rolling window. Used only when the failure
-// text names no explicit reset time.
-const windowHours = Number(process.env.QUOTA_WINDOW_HOURS ?? 5);
 
 // Default execFileSync maxBuffer is 1MB. `actions/runs?per_page=100` can return well
 // over that once a repo has ~100+ workflow runs (100 full run objects, ~1.2MB), which
@@ -40,160 +32,12 @@ const windowHours = Number(process.env.QUOTA_WINDOW_HOURS ?? 5);
 // headroom rather than a size this will eventually outgrow again.
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }).trim();
 
-/**
- * Did the last Claude-backed run die on quota, and is that window still closed?
- *
- * There is no way to ask "how much quota is left" from CI — `/usage` is an in-session
- * slash command, not a CLI subcommand — so this reads the evidence after the fact
- * instead. That turns out to be the better signal anyway: it reports what actually
- * happened rather than what a prediction says should have.
- *
- * Self-correcting by construction. Nothing is recorded; each tick re-reads the
- * same failed run and re-evaluates the deadline, so the pipeline resumes on the first
- * tick after the window opens and stays quiet until then.
- *
- * @returns {Date|null} when the quota is expected back, or null if this is not a
- *   quota failure at all.
- */
-function rateLimitedUntil() {
-  const claudeWorkflows = ['story-start', 'pr-review', 'pr-fix', 'production-prep'];
-  let last;
-  try {
-    last = JSON.parse(
-      sh('gh', ['api', `repos/${repo}/actions/runs?status=completed&per_page=20`]),
-    ).workflow_runs
-      .filter((r) => claudeWorkflows.includes(r.name))
-      .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
-  } catch (e) {
-    console.error(`Could not list runs (${e.message}); assuming no rate limit.`);
-    return null;
-  }
-  if (!last || last.conclusion === 'success') return null;
-
-  let log = '';
-  try {
-    log = sh('gh', ['run', 'view', String(last.id), '--repo', repo, '--log-failed']);
-  } catch (e) {
-    // Logs expire, and a run cancelled before producing any are normal. Either way
-    // there is nothing to match, so fall through to the ordinary stall handling.
-    console.error(`Could not read logs for run ${last.id}: ${e.message}`);
-    return null;
-  }
-
-  // Shared with the pr-review.yml verdict step, which runs the same check against
-  // the Claude action's own execution_file instead of a post-hoc log — see
-  // quota-signal.mjs for why that split exists and what "not quota" excludes
-  // (turn exhaustion, mainly: a bare /429/ once matched `12:28:51.5255429Z` on
-  // an Alvus-AI max-turns failure and reported a five-hour quota outage that was
-  // never happening, which suppressed every dispatch this script exists to make).
-  const until = checkQuotaText(log, new Date(last.updated_at), windowHours);
-  if (!until) return null;
-  console.log(`Quota signal matched in run ${last.id}'s log.`);
-  return until;
-}
-
-/** Gate every dispatch: true means "quota is gone, do nothing this tick". */
-function quotaBlocked() {
-  const until = rateLimitedUntil();
-  if (!until || Number.isNaN(until.getTime())) return false;
-  if (until <= new Date()) {
-    console.log(`Quota window closed at ${until.toISOString()}, now past. Proceeding.`);
-    return false;
-  }
-  const mins = Math.round((until - Date.now()) / 60000);
-  console.log(
-    `Claude quota exhausted; expected back at ${until.toISOString()} (~${mins}m). ` +
-      `Not dispatching — the next tick will re-check.`,
-  );
-  return true;
-}
-
-/**
- * PRs pr-review.yml's verdict step labeled `quota-blocked` — a real quota signal
- * found in the Claude action's own execution_file, not a needs-human crash (see
- * quota-signal.mjs) — sit outside the story-status-driven logic below entirely.
- * `stories.json` is only written at in_progress/done, so a PR under review is
- * invisible to the `active` filter below for as long as review takes, and a
- * quota-blocked PR needs a time-gated recheck regardless of what stories.json
- * says. So this runs first and unconditionally, every tick, ahead of anything
- * that reads stories.json or assumes `main` is checked out.
- *
- * Recovery mirrors the exact manual remedy the old plain needs-human comment
- * used to suggest: push an empty commit to the PR branch to re-trigger the
- * `synchronize` event pr-review listens for.
- *
- * @returns {boolean} true if there was a quota-blocked PR to handle this tick
- *   (whether or not the window had actually reopened) — the caller should stop
- *   rather than fall through to the stall logic below, which assumes `main` is
- *   still checked out and this function may have switched branches to push.
- */
-function recoverQuotaBlockedPrs() {
-  let prs;
-  try {
-    prs = JSON.parse(
-      sh('gh', ['pr', 'list', '--repo', repo, '--state', 'open', '--label', 'quota-blocked', '--json', 'number,headRefName']),
-    );
-  } catch (e) {
-    console.error(`Could not list quota-blocked PRs (${e.message}).`);
-    return false;
-  }
-  if (!prs.length) return false;
-
-  if (quotaBlocked()) {
-    console.log(`${prs.length} quota-blocked PR(s); window not yet open.`);
-    return true;
-  }
-
-  for (const pr of prs) {
-    // Re-check immediately before acting: a human may already have pushed a real
-    // fix (which re-runs pr-review and clears the label itself) or closed the PR
-    // since the listing above.
-    let fresh;
-    try {
-      fresh = JSON.parse(sh('gh', ['pr', 'view', String(pr.number), '--repo', repo, '--json', 'state,labels']));
-    } catch (e) {
-      console.error(`Could not re-check PR #${pr.number} (${e.message}); skipping.`);
-      continue;
-    }
-    if (fresh.state !== 'OPEN' || !fresh.labels.some((l) => l.name === 'quota-blocked')) {
-      console.log(`PR #${pr.number} is no longer open+quota-blocked; skipping.`);
-      continue;
-    }
-
-    try {
-      sh('git', ['fetch', 'origin', pr.headRefName]);
-      sh('git', ['checkout', '-B', pr.headRefName, `origin/${pr.headRefName}`]);
-      sh('git', ['config', 'user.name', 'pipeline-watchdog']);
-      sh('git', ['config', 'user.email', 'actions@users.noreply.github.com']);
-      sh('git', ['commit', '--allow-empty', '-m', 'chore: retry pr-review (Claude quota window reopened)']);
-      // Must push with a token that fires `synchronize` for other workflows to react
-      // to — the checkout step's token, which pipeline-watchdog.yml sets to
-      // PIPELINE_PAT for exactly this reason. Pushing with the default GITHUB_TOKEN
-      // would succeed silently and trigger nothing, the same trap the steering-issue
-      // and needs-human-issue creation calls elsewhere in this pipeline already avoid.
-      sh('git', ['push', 'origin', `HEAD:${pr.headRefName}`]);
-      // Remove the label only after the push that actually resumes review succeeds,
-      // so a push failure leaves the label (and the retry) for the next tick.
-      sh('gh', ['api', `repos/${repo}/issues/${pr.number}/labels/quota-blocked`, '-X', 'DELETE']);
-      sh('gh', ['pr', 'comment', String(pr.number), '--repo', repo, '--body',
-        'Pipeline watchdog: the Claude quota window has reopened. Pushed an empty commit to re-trigger `pr-review`.']);
-      console.log(`Recovered PR #${pr.number}: quota window reopened, pr-review re-triggered.`);
-    } catch (e) {
-      console.error(`Could not recover PR #${pr.number}: ${e.message}`);
-    }
-  }
-  return true;
-}
-
-if (recoverQuotaBlockedPrs()) process.exit(0);
-
 const db = JSON.parse(fs.readFileSync('stories.json', 'utf8'));
 const active = db.stories.filter((s) => ['in_progress', 'in_review', 'fixing'].includes(s.status));
 
 if (!active.length) {
   // Nothing in flight. Hand off to the normal decision — this also covers the
   // case where a dispatch itself was lost and no story ever started.
-  if (quotaBlocked()) process.exit(0);
   console.log('No story in flight; running the standard dispatch check.');
   process.exit(spawnDispatch());
 }
@@ -322,8 +166,6 @@ if (dryRun) {
   process.exit(0);
 }
 
-if (quotaBlocked()) process.exit(0);
-
 // The open PR decides this, not `status`. A story stays `in_progress` in stories.json for
 // its whole review now, so the old `status === 'in_progress'` test would have re-dispatched
 // story-start against a story already under review. What actually distinguishes the two
@@ -342,14 +184,23 @@ if (!storyPr && !exhausted) {
 // to guess at, since pushing a commit or reopening the PR would fabricate history, and an
 // empty commit would put the branch ahead for no reason. Escalate rather than act.
 const prNumber = storyPr?.number ?? story.prNumber;
+// This may just be the Claude usage limit hit mid-run rather than a real bug — there is
+// no reliable way to tell from CI (see the module docstring), so both messages below
+// name the possibility rather than silently treating it as a failure to investigate.
+const usageLimitNote =
+  'This may also just be the Claude usage limit reached mid-run rather than a real ' +
+  'problem — if so, push an empty commit to the branch once the limit resets and it ' +
+  'will pick back up.';
 const note = exhausted
   ? `Pipeline watchdog: **${story.id}** is \`${story.status}\` and has burned all ` +
     `${MAX_RETRIES} retries without making progress.\n\nFailed runs:\n` +
     failedSinceTouch.map((r) => `- ${r.name} #${r.run_number} — ${r.conclusion} — ${r.html_url}`).join('\n') +
-    `\n\nNot re-dispatching: three identical failures are a bug to fix, not a run to retry.`
+    `\n\nNot re-dispatching: three identical failures are a bug to fix, not a run to retry.` +
+    `\n\n${usageLimitNote}`
   : `Pipeline watchdog: **${story.id}** has shown no progress for ${idleMinutes} minutes ` +
     `with no workflow running.\n\nPR #${prNumber ?? '?'} likely needs its review re-run — ` +
-    `push an empty commit to the branch to re-trigger \`pr-review\`, or close and reopen the PR.`;
+    `push an empty commit to the branch to re-trigger \`pr-review\`, or close and reopen the PR.` +
+    `\n\n${usageLimitNote}`;
 
 try {
   // `prNumber` from the live PR, not story.prNumber: that field is not written until the

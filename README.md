@@ -254,10 +254,12 @@ API 5xx, or timeout can leave a story stuck with no further event coming.
 `pipeline-watchdog` runs hourly, looking for a story that's non-terminal with nothing
 running and `stories.json` untouched for 90 minutes, then re-dispatches or escalates.
 
-**Why doesn't the watchdog treat exhausted quota as a stall?** On a subscription token,
-running out looks identical to a stall from the outside, but re-dispatching would just
-burn quota that's already gone, once an hour, forever. So it checks whether the last run
-failed on a rate limit and whether that window is still closed before acting.
+**Why doesn't the watchdog try to detect exhausted quota separately?** On a subscription
+token, running out looks identical to any other stall or failed run from the outside —
+the action's console log is sanitized, so a usage-limit death can't be told apart from a
+real bug reliably enough to gate on. So the watchdog doesn't try: it handles a quota
+exhaustion the same as any other stall, and its needs-human escalation just names the
+possibility so a human can retry with an empty commit once the window reopens.
 
 **Why does dispatch go through one script?** `dispatch-next.mjs` is the only thing that
 dispatches, so the pause switch, the stuck-story check, and the daily run ceiling can't
