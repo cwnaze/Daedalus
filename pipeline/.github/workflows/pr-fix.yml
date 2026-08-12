@@ -29,17 +29,96 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.PIPELINE_PAT }}
+
+      # Read the PR head and the outstanding findings *before* the agent runs, so
+      # the assert step below can tell "pushed a fix" from "exited having done
+      # nothing". Cheap enough to run ahead of setup-project, which lets the
+      # no-work case skip the whole toolchain install.
+      - id: pre
+        name: Record the PR head and count outstanding findings
+        env:
+          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+          pr=$(printf '%s' "$ISSUE_BODY" | grep -oE '^PR: #[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+          if [ -z "$pr" ]; then
+            echo "::error::Findings issue has no 'PR: #<n>' line — cannot tell which branch a fix belongs on."
+            exit 1
+          fi
+          left=$(printf '%s' "$ISSUE_BODY" | grep -c '^- \[ \]' || true)
+          {
+            echo "pr=$pr"
+            echo "sha=$(gh pr view "$pr" --json headRefOid -q .headRefOid)"
+            echo "left=${left:-0}"
+          } >> "$GITHUB_OUTPUT"
+          echo "PR #$pr, ${left:-0} unchecked finding(s)."
+
+      # Every body edit fires this workflow, so a re-review that only *checks off*
+      # last round's boxes triggers a fix run with nothing to fix. In Alvus-AI
+      # (US-019, 2026-08-12) one such run spent 7 turns and $0.25 discovering
+      # exactly that. Gating here rather than on the job keeps the trigger honest —
+      # the run still exists and is green — while skipping the toolchain and the
+      # model spend.
       - uses: ./.github/actions/setup-project
+        if: steps.pre.outputs.left != '0'
         with:
           playwright: 'true'
       - name: Materialize .env from repo secrets
+        if: steps.pre.outputs.left != '0'
         env:
           ALL_SECRETS: ${{ toJSON(secrets) }}
         run: node .github/scripts/write-env.mjs
       - uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1
+        if: steps.pre.outputs.left != '0'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.PIPELINE_PAT }}
           prompt: /pr-fix
           # See story-start.yml: default action permissions have no Bash access.
           claude_args: --max-turns 200 --allowedTools "Bash,Edit,Write,Glob,Grep"
+
+      # The action's console output is sanitized ("full output hidden for
+      # security"), so a run that does nothing leaves no trace of *why*. Six
+      # consecutive silent no-ops in Alvus-AI (US-019, 2026-08-11/12) had to be
+      # diagnosed from commit timestamps and turn counts because this file was
+      # never kept.
+      - name: Upload the agent's execution log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-execution-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /home/runner/work/_temp/claude-execution-output.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # The job used to end at the agent step, so "fixed and pushed" and "burned
+      # $1.98 and exited" both reported success. That is what made this failure
+      # mode invisible in Alvus-AI (US-019, 2026-08-11/12): six green runs, zero
+      # commits, and a watchdog that counted each green run as progress. A fix
+      # run's contract is that the branch moves; assert it, so a silent no-op is a
+      # red run the watchdog can actually see.
+      - name: Assert the fix landed
+        if: always() && steps.pre.outputs.left != '0'
+        env:
+          GH_TOKEN: ${{ secrets.PIPELINE_PAT }}
+          PR: ${{ steps.pre.outputs.pr }}
+          BEFORE: ${{ steps.pre.outputs.sha }}
+          ISSUE: ${{ github.event.issue.number }}
+          LEFT: ${{ steps.pre.outputs.left }}
+        run: |
+          set -euo pipefail
+          after=$(gh pr view "$PR" --json headRefOid -q .headRefOid)
+          if [ "$after" != "$BEFORE" ]; then
+            echo "Branch moved $BEFORE -> $after."
+            exit 0
+          fi
+          # Unchecked at the start and the branch never moved. Whether the agent
+          # disagreed with the finding, could not verify it, or died mid-run, the
+          # outcome is the same and it is not success.
+          gh issue comment "$ISSUE" --body \
+            "\`pr-fix\` run [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) exited without pushing, with ${LEFT} unchecked finding(s) still open. The branch is unchanged at \`${after}\`.
+
+          This is a failed fix run, not a completed one. If the fix was correct but unverifiable, it should have been pushed with a note saying what could not be run (see \`pr-fix\` SKILL.md step 4); if the finding is wrong, it should have been argued on this issue (step 3). Silently discarding the work is neither." || true
+          echo "::error::pr-fix pushed nothing while ${LEFT} finding(s) remain unchecked. See #${ISSUE}."
+          exit 1

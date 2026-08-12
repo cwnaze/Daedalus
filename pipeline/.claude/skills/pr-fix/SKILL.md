@@ -46,7 +46,29 @@ Run `verification.commands`, this story's specs, and all `done` story specs. Reg
 the demo. Do not push a fix you have not verified — it costs a full round against the
 3-round budget.
 
+Verification *failing* is not the same as verification being *impossible*. If the
+environment itself is broken — local services will not start, a dependency registry is
+rate-limiting, or a `done` story's spec fails identically on the merge-base — then the
+bar above cannot be met no matter how good your fix is, and treating it as a blocker
+means discarding correct work. Push it anyway, and comment on the issue naming exactly
+what you could not run and why. A reviewed-but-unverified fix on the branch is
+recoverable by the next round; an unpushed one dies with the runner.
+
+Check the merge-base before blaming yourself for a failure: if the same spec fails on
+the commit this branch started from, it is pre-existing and not yours to clear.
+
 ## 5. Push
+
+**Never end a run with edits sitting in the working tree.** Push, or say why you are
+not — a comment on the issue explaining the disagreement (step 3) or the broken
+environment (step 4) is a legitimate outcome; exiting silently is not. The workflow
+enforces this: if the branch has not moved and findings are still unchecked, the run
+fails and is reported as a failed fix attempt.
+
+Alvus-AI's US-019 (2026-08-11/12) lost six consecutive fix runs and roughly $7 of model
+spend to exactly this — each one made its edits, hit an unverifiable environment, exited
+green having pushed nothing, and left the pipeline to escalate a healthy PR to
+`needs-human`.
 
 One commit per logical fix, referencing the issue. Check the boxes you fixed. Push to
 the PR branch — that fires `synchronize`, which re-runs `pr-review`. Push only to the
