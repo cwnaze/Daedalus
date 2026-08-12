@@ -180,9 +180,55 @@ if (!storyPr && !exhausted) {
   process.exit(0);
 }
 
-// Either the retry budget is gone, or a PR is open — where re-running review is not ours
-// to guess at, since pushing a commit or reopening the PR would fabricate history, and an
-// empty commit would put the branch ahead for no reason. Escalate rather than act.
+// An open PR used to escalate on the first quiet window, because the branch above was the
+// only retry path. That made `needs-human` the guaranteed end state of any pr-fix run that
+// exited without pushing — no failure, no exhausted budget, just silence the watchdog could
+// only interpret one way. Alvus-AI's US-019 (2026-08-12) sat at round 2 of 3 with one
+// unchecked finding and a mergeable PR when it was flagged for a human.
+//
+// A findings issue with unchecked boxes under the round budget is not a human problem: it
+// is a fix that did not happen. Re-fire it the way a human does — toggle `agent-fix`, which
+// emits `labeled`. That fabricates no history: no commit, no reopen, no empty push, which
+// is what made re-running *review* unacceptable here. The retry is still budgeted, so a
+// finding that genuinely cannot be fixed escalates after MAX_RETRIES instead of never.
+const findingsIssue = (() => {
+  if (!storyPr) return null;
+  try {
+    const issues = JSON.parse(
+      sh('gh', ['issue', 'list', '--repo', repo, '--state', 'open', '--limit', '100',
+                '--json', 'number,title,body,labels']),
+    );
+    return issues.find((i) => new RegExp(`^PR: #${storyPr.number}(?:$|[^0-9])`, 'm').test(i.body ?? '')) ?? null;
+  } catch (e) {
+    console.error(`Could not list findings issues (${e.message}); treating the PR as issue-less.`);
+    return null;
+  }
+})();
+
+if (storyPr && findingsIssue && !exhausted) {
+  const unchecked = (findingsIssue.body?.match(/^- \[ \]/gm) ?? []).length;
+  const round = Number(findingsIssue.title.match(/round (\d+)/)?.[1] ?? 1);
+  const humanOwned = (findingsIssue.labels ?? []).some((l) => l.name === 'needs-human');
+  if (unchecked > 0 && round < 3 && !humanOwned) {
+    // Remove-then-add rather than a bare add: the label is already present in the common
+    // case (pr-fix ran and did nothing), and re-adding an existing label emits no event.
+    sh('gh', ['issue', 'edit', String(findingsIssue.number), '--repo', repo, '--remove-label', 'agent-fix']);
+    sh('gh', ['issue', 'edit', String(findingsIssue.number), '--repo', repo, '--add-label', 'agent-fix']);
+    console.log(
+      `Re-fired pr-fix for #${findingsIssue.number} (${unchecked} unchecked, round ${round}, ` +
+        `attempt ${failedSinceTouch.length + 1}/${MAX_RETRIES}).`,
+    );
+    process.exit(0);
+  }
+  console.log(
+    `Not re-firing pr-fix for #${findingsIssue.number}: ` +
+      `${unchecked} unchecked, round ${round}${humanOwned ? ', already needs-human' : ''}.`,
+  );
+}
+
+// Either the retry budget is gone, or there is nothing left to re-fire. Escalate rather
+// than act: pushing a commit or reopening the PR would fabricate history, and an empty
+// commit would put the branch ahead for no reason.
 const prNumber = storyPr?.number ?? story.prNumber;
 // This may just be the Claude usage limit hit mid-run rather than a real bug — there is
 // no reliable way to tell from CI (see the module docstring), so both messages below
@@ -213,6 +259,15 @@ try {
     // read:org/read:discussion scopes this token doesn't have — unrelated to the
     // label itself. The REST labels endpoint sidesteps that query entirely.
     sh('gh', ['api', `repos/${repo}/issues/${prNumber}/labels`, '-f', 'labels[]=needs-human']);
+    // Label the findings issue too, not just the PR. pr-fix's job guard reads the
+    // *issue's* labels (`github.event.issue.labels`), so a `needs-human` that lives
+    // only on the PR is invisible to the workflow it is meant to stop — anything that
+    // edits the issue would start another fix run straight through the hard stop.
+    // Dropping `agent-fix` matches what pr-review does when it ends a round-3 loop.
+    if (findingsIssue) {
+      sh('gh', ['issue', 'edit', String(findingsIssue.number), '--repo', repo,
+                '--remove-label', 'agent-fix', '--add-label', 'needs-human']);
+    }
   } else {
     sh('gh', ['issue', 'create', '--repo', repo, '--title', `Pipeline stalled: ${story.id}`, '--label', 'needs-human', '--body', note]);
   }
