@@ -67,6 +67,15 @@ jobs:
           # requires an approval from a real user; otherwise the github-actions
           # bot approves, which satisfies a plain "require approvals" rule.
           GH_TOKEN: ${{ secrets.REVIEWER_TOKEN || secrets.GITHUB_TOKEN }}
+          # ...but the recovery block's `gh issue edit --add-label agent-fix`
+          # exists solely to fire pr-fix, and an issue event actored by
+          # GITHUB_TOKEN triggers nothing — the same constraint the claude step
+          # above uses PIPELINE_PAT for. One identity cannot satisfy both rules,
+          # so the label edit gets its own. (Alvus-AI PR #61, 2026-08-15: the
+          # fallback requested changes, re-labelled the issue as
+          # github-actions[bot], no pr-fix ran, and the PR sat blocked
+          # indefinitely behind green checks.)
+          ISSUE_TOKEN: ${{ secrets.PIPELINE_PAT }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           set -euo pipefail
@@ -86,7 +95,13 @@ jobs:
               | jq -c --arg pr "$PR" '[.[] | select(.body | test("PR: #" + $pr + "($|[^0-9])"))] | .[0] // empty')
             if [ -z "$issue" ]; then
               echo "::error::No findings issue references PR #$PR either — truly inconclusive."
-              gh pr comment "$PR" --body "pr-review finished without recording a verdict or a findings issue. This needs a human — it may also just be the Claude usage limit hit mid-run; if so, push an empty commit to this branch once the limit resets to re-trigger \`pr-review\`." || true
+              # Don't blame the usage limit here. Every observed instance of this
+              # failure (Alvus-AI PRs #28, #55, #61) was a clean run —
+              # "subtype": "success", is_error false, well under --max-turns — that
+              # simply skipped the verdict step. Pointing a human at "wait for the
+              # limit to reset" costs a debugging cycle chasing a cause that has
+              # never once been real.
+              gh pr comment "$PR" --body "pr-review finished without recording a verdict or a findings issue, so there is nothing to recover a verdict from. This needs a human: re-run the workflow, or push an empty commit to this branch to re-trigger \`pr-review\`. Check the run's agent step before assuming an infrastructure cause — this has so far always been a clean run that skipped the verdict step, not a crash or a usage limit." || true
               gh pr edit "$PR" --add-label needs-human || true
               exit 1
             fi
@@ -97,7 +112,11 @@ jobs:
               exit 1
             fi
             round=$(echo "$issue" | jq -r '.title' | grep -oE 'round [0-9]+' | grep -oE '[0-9]+' || echo 1)
-            blocking=$(echo "$issue" | jq -r '.body' | awk '/^## Blocking/{f=1;next} /^## /{f=0} f' | grep -c '^- \[' || true)
+            # '^- \[ \]', not '^- \[': on a re-review after pr-fix every finding
+            # in the issue is checked off as '- [x]', and counting those as
+            # outstanding makes a fully-fixed PR score non-zero and take the
+            # changes-requested path forever.
+            blocking=$(echo "$issue" | jq -r '.body' | awk '/^## Blocking/{f=1;next} /^## /{f=0} f' | grep -c '^- \[ \]' || true)
             echo "Recovered from issue #$issue_num: round=$round blocking_findings=${blocking:-0}"
             note="(recovered: pr-review omitted its verdict file this run; derived from issue #$issue_num's recorded findings)"
             if [ "${blocking:-0}" -eq 0 ]; then
@@ -105,7 +124,7 @@ jobs:
             elif [ "$round" -lt 3 ]; then
               body=$(echo "$issue" | jq -r '.body')
               printf '%s\n\n---\n_pr-review omitted its verdict file this run; the workflow fallback recovered this as changes-requested and routed it to pr-fix._\n' "$body" \
-                | gh issue edit "$issue_num" --add-label agent-fix --body-file -
+                | GH_TOKEN="${ISSUE_TOKEN:-$GH_TOKEN}" gh issue edit "$issue_num" --add-label agent-fix --body-file -
               gh pr review "$PR" --request-changes --body "Findings in #$issue_num (round $round), routed to pr-fix. $note"
             else
               gh pr edit "$PR" --add-label needs-human || true
